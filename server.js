@@ -26,6 +26,9 @@ const connectDB = async () => {
     process.exit(1); // Exit process with failure
   }
 };
+app.use("/api/admin", require("./routes/adminRoutes"))
+app.use("/api/teacher", require("./routes/teacherRoutes"))
+app.use("/api/student", require("./routes/studentsRoutes"))
 connectDB().then(()=>{
     app.listen(PORT, ()=>{
         console.log(`Server Running on PORT ${PORT}`)
