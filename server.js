@@ -27,7 +27,7 @@ const connectDB = async () => {
   }
 };
 app.use("/api/admin", require("./routes/adminRoutes"))
-// app.use("/api/teacher", require("./routes/teacherRoutes"))
+app.use("/api/teacher", require("./routes/teacherRoutes"))
 // app.use("/api/student", require("./routes/studentsRoutes"))
 connectDB().then(()=>{
     app.listen(PORT, ()=>{
