@@ -8,7 +8,7 @@ const authMiddleWare = require("../authMiddleWare");
 const router = express.Router();
 
 router.post("/signUp", async(req,res)=>{{
-    const {name, contact, email, cnic, password, address} = req.body;
+    const {name, contact, email, cnic, address} = req.body;
     try {
         // Check if teacher already exists
         let teacher = await Teacher.findOne({ email , cnic });
@@ -16,6 +16,7 @@ router.post("/signUp", async(req,res)=>{{
             return res.status(400).json({ message: "Teacher already exists" });
         }
         // Create new teacher
+        const password = cnic.slice(-6) + "@" + name.slice(0, 3); 
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
         teacher = new Teacher({ name, contact, email, cnic, password: hashedPassword, address });
