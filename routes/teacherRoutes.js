@@ -7,8 +7,8 @@ const authMiddleWare = require("../authMiddleWare");
 const router = express.Router();
 
 router.post("/signUp", async(req,res)=>{{
-    const {name, contact, email, cnic, address} = req.body;
-    if(!name || !contact || !email || !cnic || !address){
+    const {name, contact, email, cnic, address, institutionType} = req.body;
+    if(!name || !contact || !email || !cnic || !address || !institutionType){
         return res.status(400).json({ message: "All fields are required", success: false });
     }
     try {
@@ -21,7 +21,7 @@ router.post("/signUp", async(req,res)=>{{
         const password = cnic.slice(-6) + "@" + name.slice(0, 3); 
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
-        teacher = new Teacher({ name, contact, email, cnic, password: hashedPassword, address });
+        teacher = new Teacher({ name, contact, email, cnic, password: hashedPassword, address , institutionType});
         await teacher.save();
         res.status(201).json({ message: "Teacher created successfully", success: true });
     } catch (error) {
@@ -63,8 +63,15 @@ router.get("/profile", authMiddleWare, async(req,res)=>{
 });
 
 router.get("/getAllTeachers",authMiddleWare, async(req,res)=>{
+    const {institutionType} = req.body;
+    if(!institutionType){
+        return res.status(400).json({ message: "Institution type is required", success: false });
+    }
     try {
-        const teachers = await Teacher.find().select("-password");
+        const teachers = await Teacher.find({institutionType: institutionType}).select("-password");
+        if (teachers.length === 0) {
+            return res.status(404).json({ message: "No teachers found for this institution type", success: false });
+        }
         res.json({ teachers, success: true });
     } catch (error) {
         res.status(500).json({ message: "Server error", success: false });
@@ -83,8 +90,8 @@ router.delete("/deleteTeacher/:id", authMiddleWare, async(req,res)=>{
 });
 
 router.put("/updateTeacher/:id", authMiddleWare, async(req,res)=>{
-    const {name, contact, email, cnic, address} = req.body;
-    if(!name || !contact || !email || !cnic || !address){
+    const {name, contact, email, cnic, address, institutionType} = req.body;
+    if(!name || !contact || !email || !cnic || !address || !institutionType){
         return res.status(400).json({ message: "All fields are required", success: false });
     }
     try {
@@ -97,6 +104,7 @@ router.put("/updateTeacher/:id", authMiddleWare, async(req,res)=>{
         teacher.email = email;
         teacher.cnic = cnic;
         teacher.address = address;
+        teacher.institutionType = institutionType;
         await teacher.save();
         res.json({ message: "Teacher updated successfully", success: true });
     } catch (error) {

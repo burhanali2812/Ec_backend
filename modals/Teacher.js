@@ -7,6 +7,7 @@ const teacherSchema = new mongoose.Schema({
   cnic: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   address: { type: String, required: true },
+  institutionType: { type: String, enum: ["academy", "school"], required: true, default: "academy" },
   profileImage: { type: String, default: null },
   createdAt: { type: Date, default: Date.now },
 });
