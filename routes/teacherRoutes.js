@@ -63,7 +63,7 @@ router.get("/profile", authMiddleWare, async(req,res)=>{
 });
 
 router.get("/getAllTeachers",authMiddleWare, async(req,res)=>{
-    const {institutionType} = req.body;
+ const { institutionType } = req.query;
     if(!institutionType){
         return res.status(400).json({ message: "Institution type is required", success: false });
     }
