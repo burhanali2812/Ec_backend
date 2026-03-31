@@ -2,13 +2,15 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const express = require("express");
 const Teacher = require("../modals/Teacher");
-// const Course = require("../modals/Course");
 // const Registration = require("../modals/Registration");
 const authMiddleWare = require("../authMiddleWare");
 const router = express.Router();
 
 router.post("/signUp", async(req,res)=>{{
     const {name, contact, email, cnic, address} = req.body;
+    if(!name || !contact || !email || !cnic || !address){
+        return res.status(400).json({ message: "All fields are required", success: false });
+    }
     try {
         // Check if teacher already exists
         let teacher = await Teacher.findOne({ email , cnic });
@@ -48,6 +50,25 @@ router.post("/login", async(req,res)=>{
     }
 });
 
+router.get("/profile", authMiddleWare, async(req,res)=>{
+    try {
+        const teacher = await Teacher.findById(req.user.id).select("-password");
+        if (!teacher) {
+            return res.status(404).json({ message: "Teacher not found", success: false });
+        }
+        res.json({ teacher, success: true });
+    } catch (error) {
+        res.status(500).json({ message: "Server error", success: false });
+    }
+});
 
+router.get("/getAllTeachers",authMiddleWare, async(req,res)=>{
+    try {
+        const teachers = await Teacher.find().select("-password");
+        res.json({ teachers, success: true });
+    } catch (error) {
+        res.status(500).json({ message: "Server error", success: false });
+    }
+});
 
 module.exports = router;
