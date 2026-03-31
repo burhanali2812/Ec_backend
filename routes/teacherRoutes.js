@@ -13,9 +13,9 @@ router.post("/signUp", async(req,res)=>{{
     }
     try {
         // Check if teacher already exists
-        let teacher = await Teacher.findOne({ email , cnic });
+        let teacher = await Teacher.findOne({ email , cnic, contact });
         if (teacher) {
-            return res.status(400).json({ message: "Teacher already exists" , success: false});
+            return res.status(400).json({ message: "Teacher already exists on this email, CNIC, or contact" , success: false});
         }
         // Create new teacher
         const password = cnic.slice(-6) + "@" + name.slice(0, 3); 
@@ -66,6 +66,39 @@ router.get("/getAllTeachers",authMiddleWare, async(req,res)=>{
     try {
         const teachers = await Teacher.find().select("-password");
         res.json({ teachers, success: true });
+    } catch (error) {
+        res.status(500).json({ message: "Server error", success: false });
+    }
+});
+router.delete("/deleteTeacher/:id", authMiddleWare, async(req,res)=>{
+    try {
+        const teacher = await Teacher.findByIdAndDelete(req.params.id);
+        if (!teacher) {
+            return res.status(404).json({ message: "Teacher not found", success: false });
+        }
+        res.json({ message: "Teacher deleted successfully", success: true });
+    } catch (error) {
+        res.status(500).json({ message: "Server error", success: false });
+    }
+});
+
+router.put("/updateTeacher/:id", authMiddleWare, async(req,res)=>{
+    const {name, contact, email, cnic, address} = req.body;
+    if(!name || !contact || !email || !cnic || !address){
+        return res.status(400).json({ message: "All fields are required", success: false });
+    }
+    try {
+        const teacher = await Teacher.findById(req.params.id);
+        if (!teacher) {
+            return res.status(404).json({ message: "Teacher not found", success: false });
+        }
+        teacher.name = name;
+        teacher.contact = contact;
+        teacher.email = email;
+        teacher.cnic = cnic;
+        teacher.address = address;
+        await teacher.save();
+        res.json({ message: "Teacher updated successfully", success: true });
     } catch (error) {
         res.status(500).json({ message: "Server error", success: false });
     }
