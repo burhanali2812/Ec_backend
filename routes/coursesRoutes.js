@@ -4,17 +4,27 @@ const Course = require("../modals/Course");
 const authMiddleWare = require("../authMiddleWare");
 const router = express.Router();
 
-router.post("/addCourse", authMiddleWare, async(req,res)=>{
-    const {title, description, teacherId} = req.body;
-    if(!title || !description || !teacherId){
-        return res.status(400).json({ message: "All fields are required", success: false });
-    }
+router.post("/addCourse", async (req, res) => {
+    const { title, description, teacherIds } = req.body; // teacherIds is an array
+
     try {
-        const course = new Course({title, description, teacher: teacherId});
-        await course.save();
-        res.status(201).json({ message: "Course created successfully", success: true });
+        // 1. Create the new course
+        const newCourse = new Course({
+            title,
+            description,
+            teachers: teacherIds // Assigning the array of teacher IDs
+        });
+        const savedCourse = await newCourse.save();
+
+        // 2. THE LINK: Update all selected teachers to include this course ID
+        await Teacher.updateMany(
+            { _id: { $in: teacherIds } }, 
+            { $push: { courses: savedCourse._id } }
+        );
+
+        res.status(201).json({ message: "Course created and linked to teachers!" });
     } catch (error) {
-        res.status(500).json({ message: "Server error", success: false });
+        res.status(500).json({ message: "Error linking course", error });
     }
 });
 
