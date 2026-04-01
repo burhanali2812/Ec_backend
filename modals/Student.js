@@ -8,7 +8,7 @@ const studentSchema = new mongoose.Schema({
   gender: { type: String, enum: ['female', 'male'], required: true },
   profileImage: { type: String, default: null }, 
   rollNumber: { type: String, required: true, unique: true },
-  class: { type: String, required: true },
+  classInfo: { type: String, required: true },
   fatherName: { type: String, required: true },
   fatherContact: { type: String },
   password: { type: String, required: true },

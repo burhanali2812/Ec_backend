@@ -4,7 +4,7 @@ const Course = require("../modals/Course");
 const authMiddleWare = require("../authMiddleWare");
 const router = express.Router();
 
-router.post("/addCourse", async (req, res) => {
+router.post("/addCourse", authMiddleWare,async (req, res) => {
   const { title, description, teacherIds = [], classTarget = [] } = req.body;
 
   try {
@@ -58,7 +58,7 @@ router.get("/allCourses", authMiddleWare, async (req, res) => {
   }
 });
 
-router.put("/updateCourse/:id", async (req, res) => {
+router.put("/updateCourse/:id",authMiddleWare, async (req, res) => {
   const { id } = req.params;
   const { title, description, teacherIds = [], classTarget = [] } = req.body;
 
@@ -116,7 +116,7 @@ router.put("/updateCourse/:id", async (req, res) => {
   }
 });
 
-router.delete("/deleteCourse/:id", async (req, res) => {
+router.delete("/deleteCourse/:id", authMiddleWare,async (req, res) => {
   const { id } = req.params;
 
   try {
