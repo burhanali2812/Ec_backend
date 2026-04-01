@@ -5,7 +5,7 @@ const authMiddleWare = require("../authMiddleWare");
 const router = express.Router();
 
 router.post("/addCourse", async (req, res) => {
-  const { title, description, teacherIds } = req.body; // teacherIds is an array
+  const { title, description, teacherIds = [], classTarget = [] } = req.body;
 
   try {
     // 1. Create the new course
@@ -13,6 +13,7 @@ router.post("/addCourse", async (req, res) => {
       title,
       description,
       teachers: teacherIds, // Assigning the array of teacher IDs
+      classTarget,
     });
     const savedCourse = await newCourse.save();
 
@@ -48,7 +49,9 @@ router.get("/myCourses", authMiddleWare, async (req, res) => {
 
 router.get("/allCourses", authMiddleWare, async (req, res) => {
   try {
-    const courses = await Course.find().populate("teachers", "name email");
+    const courses = await Course.find()
+      .populate("teachers", "name email")
+      .populate("classTarget.teacher", "name email");
     res.json({ courses, success: true });
   } catch (error) {
     res.status(500).json({ message: "Server error", success: false });
@@ -57,7 +60,7 @@ router.get("/allCourses", authMiddleWare, async (req, res) => {
 
 router.put("/updateCourse/:id", async (req, res) => {
   const { id } = req.params;
-  const { title, description, teacherIds = [] } = req.body;
+  const { title, description, teacherIds = [], classTarget = [] } = req.body;
 
   try {
     const existingCourse = await Course.findById(id);
@@ -77,6 +80,7 @@ router.put("/updateCourse/:id", async (req, res) => {
     existingCourse.title = title;
     existingCourse.description = description;
     existingCourse.teachers = nextTeacherIds;
+    existingCourse.classTarget = classTarget;
     await existingCourse.save();
 
     const removedTeacherIds = previousTeacherIds.filter(
@@ -109,6 +113,32 @@ router.put("/updateCourse/:id", async (req, res) => {
     return res
       .status(500)
       .json({ message: "Error updating course", success: false, error });
+  }
+});
+
+router.delete("/deleteCourse/:id", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const course = await Course.findById(id);
+    if (!course) {
+      return res
+        .status(404)
+        .json({ message: "Course not found", success: false });
+    }
+
+    await Teacher.updateMany(
+      { _id: { $in: course.teachers || [] } },
+      { $pull: { courses: course._id } },
+    );
+
+    await Course.findByIdAndDelete(id);
+
+    return res.json({ message: "Course deleted successfully", success: true });
+  } catch (error) {
+    return res
+      .status(500)
+      .json({ message: "Error deleting course", success: false, error });
   }
 });
 module.exports = router;
