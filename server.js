@@ -1,18 +1,16 @@
-const mongoose = require("mongoose")
-const express = require("express")
-const cors = require("cors")
+const mongoose = require("mongoose");
+const express = require("express");
+const cors = require("cors");
 require("dotenv").config();
 
 const app = express();
 app.use(cors());
-app.use(express.json())
-
+app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 app.get("/", (req, res) => {
   res.send("Ec Portal Backend is Live!");
 });
-
 
 const connectDB = async () => {
   try {
@@ -26,11 +24,12 @@ const connectDB = async () => {
     process.exit(1); // Exit process with failure
   }
 };
-app.use("/api/admin", require("./routes/adminRoutes"))
-app.use("/api/teacher", require("./routes/teacherRoutes"))
+app.use("/api/admin", require("./routes/adminRoutes"));
+app.use("/api/teacher", require("./routes/teacherRoutes"));
+app.use("/api/courses", require("./routes/coursesRoutes"));
 // app.use("/api/student", require("./routes/studentsRoutes"))
-connectDB().then(()=>{
-    app.listen(PORT, ()=>{
-        console.log(`Server Running on PORT ${PORT}`)
-    })
-})
+connectDB().then(() => {
+  app.listen(PORT, () => {
+    console.log(`Server Running on PORT ${PORT}`);
+  });
+});
