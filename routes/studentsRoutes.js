@@ -77,7 +77,7 @@ router.post("/signUp", authMiddleWare, async (req, res) => {
       .status(201)
       .json({ message: "Student created successfully", success: true });
   } catch (error) {
-    res.status(500).json({ message: "Server error", success: false });
+    res.status(500).json({ message: "Server error", success: false , error: error.message});
   }
 });
 
