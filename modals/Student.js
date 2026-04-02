@@ -6,6 +6,7 @@ const studentSchema = new mongoose.Schema({
   address: { type: String, required: true },
   contact: { type: String, required: true },
   gender: { type: String, enum: ['female', 'male'], required: true },
+  institutionType: { type: String, enum: ["Academy", "School"], required: true },
   profileImage: { type: String, default: null }, 
   rollNumber: { type: String, required: true, unique: true },
   classInfo: { type: String, required: true },

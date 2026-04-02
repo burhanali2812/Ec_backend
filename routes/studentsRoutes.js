@@ -12,6 +12,7 @@ router.post("/signUp", authMiddleWare, async (req, res) => {
     email,
     gender,
     address,
+    institutionType,
     classInfo,
     fatherName,
     fatherContact,
@@ -22,6 +23,7 @@ router.post("/signUp", authMiddleWare, async (req, res) => {
     !email ||
     !gender ||
     !address ||
+    !institutionType ||
     !classInfo ||
     !fatherName
   ) {
@@ -30,7 +32,7 @@ router.post("/signUp", authMiddleWare, async (req, res) => {
       .json({ message: "All fields are required", success: false });
   }
   //rollnumber generation logic: ECA-10001, ECA-10002 , ECA(for academy) ECS(for school) + 5 digit number starting from 10001
-  const institutionPrefix = classInfo.toLowerCase().includes("academy")
+  const institutionPrefix = institutionType.toLowerCase() === "academy"
     ? "ECA"
     : "ECS";
   const lastStudent = await Student.findOne({ classInfo }).sort({
@@ -66,6 +68,7 @@ router.post("/signUp", authMiddleWare, async (req, res) => {
       gender,
       address,
       classInfo,
+        institutionType,
       fatherName,
       fatherContact,
       password: hashedPassword,
@@ -132,6 +135,86 @@ router.get("/allStudents", authMiddleWare, async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: "Server error", success: false });
   }
+});
+
+router.get("/getAllStudents", authMiddleWare, async (req, res) => {
+    const { institutionType } = req.query;
+    if(!institutionType){
+        return res.status(400).json({ message: "Institution type is required", success: false });
+    }
+    try {
+        const students = await Student.find({institutionType: institutionType}).select("-password");
+        if (students.length === 0) {
+            return res.status(404).json({ message: "No students found for this institution type", success: false });
+        }
+        res.json({ students, success: true });
+    } catch (error) {
+        res.status(500).json({ message: "Server error", success: false });
+    }
+});
+
+router.get("/myProfile", authMiddleWare, async (req, res) => {
+  try {
+    const student = await Student.findById(req.user.id
+    ).select("-password");
+    if (!student) {
+      return res.status(404).json({ message: "Student not found", success: false });
+    }
+    res.json({ student, success: true });   
+    } catch (error) {
+        res.status(500).json({ message: "Server error", success: false });
+     }
+});
+
+router.delete("/deleteStudent/:id", authMiddleWare, async (req, res) => {
+  try {
+    const student = await Student.findByIdAndDelete(req.params.id);
+    if (!student) {
+      return res.status(404).json({ message: "Student not found", success: false });
+    }
+    res.json({ message: "Student deleted successfully", success: true });
+    } catch (error) {
+        res.status(500).json({ message: "Server error", success: false });
+    }   
+});
+
+router.put("/updateStudent/:id", authMiddleWare, async (req, res) => {
+  const {
+    name,
+    contact
+    , email,
+    gender,
+    address,
+    institutionType,
+    classInfo,
+    fatherName,
+    fatherContact,
+    } = req.body;
+    if (      !name ||
+      !contact ||
+      !email ||
+      !gender ||
+      !address ||
+      !institutionType ||
+      !classInfo ||
+      !fatherName ||
+      !fatherContact
+    ) {
+      return res.status(400).json({ message: "All fields are required", success: false });
+    }
+    try {
+      const student = await Student.findByIdAndUpdate(
+        req.params.id,
+        { ...req.body },
+        { new: true }
+      ).select("-password");
+      if (!student) {
+        return res.status(404).json({ message: "Student not found", success: false });
+      }
+      res.json({ student, success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Server error", success: false });
+    }
 });
 
 module.exports = router;
