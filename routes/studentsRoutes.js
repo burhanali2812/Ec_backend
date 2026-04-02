@@ -32,9 +32,7 @@ router.post("/signUp", authMiddleWare, async (req, res) => {
       .json({ message: "All fields are required", success: false });
   }
   //rollnumber generation logic: ECA-10001, ECA-10002 , ECA(for academy) ECS(for school) + 5 digit number starting from 10001
-  const institutionPrefix = institutionType.toLowerCase() === "academy"
-    ? "ECA"
-    : "ECS";
+  const institutionPrefix = institutionType === "Academy" ? "ECA" : "ECS";
   const lastStudent = await Student.findOne({ classInfo }).sort({
     createdAt: -1,
   });
