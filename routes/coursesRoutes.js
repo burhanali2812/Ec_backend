@@ -44,7 +44,7 @@ router.post("/addCourse", authMiddleWare, async (req, res) => {
 
 router.get("/myCourses", authMiddleWare, async (req, res) => {
   try {
-    const courses = await Course.find({ teachers: req.user.id }).populate(
+    const courses = await Course.find({ "classTarget.teacher": req.user.id }).populate(
       "teachers",
       "name email",
     );
