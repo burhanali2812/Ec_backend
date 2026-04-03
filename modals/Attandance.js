@@ -5,6 +5,7 @@ const attendanceSchema = new mongoose.Schema({
     course: { type: mongoose.Schema.Types.ObjectId, ref: "Course", required: true }, // NEW
     date: { type: Date, required: true },
     status: { type: String, enum: ["present", "absent"], required: true },
+    percentage: { type: Number, default: 0 },
     verificationStatus: {
         type: String,
         enum: ["pending", "approved", "rejected"],
