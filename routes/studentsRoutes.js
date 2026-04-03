@@ -4,8 +4,7 @@ const jwt = require("jsonwebtoken");
 const router = express.Router();
 const Student = require("../modals/Student");
 const authMiddleWare = require("../authMiddleWare");
-const Counter = require("../models/Counter"); // Import the counter model
-const bcrypt = require("bcryptjs");
+const Counter = require("../modals/Counter"); // Import the counter model
 
 router.post("/signUp", authMiddleWare, async (req, res) => {
   const { name, contact, email, gender, address, institutionType, classInfo, fatherName, fatherContact } = req.body;
