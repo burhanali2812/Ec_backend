@@ -114,24 +114,11 @@ router.get("/session", authMiddleWare, async (req, res) => {
     const attendanceMap = attendanceDocs.reduce((acc, item) => {
       const studentId = String(item.registration?.student || "");
       if (studentId) {
-        acc[studentId] = item.status;
+        acc[studentId] = {
+          status: item.status,
+          percentage: item.percentage || 0,
+        };
       }
-      return acc;
-    }, {});
-
-    const percentageMap = attendanceDocs.reduce((acc, item) => {
-      const studentId = String(item.registration?.student || "");
-      if (!studentId) return acc;
-
-      if (!acc[studentId]) {
-        acc[studentId] = { total: 0, present: 0 };
-      }
-
-      acc[studentId].total += 1;
-      if (item.status === "present") {
-        acc[studentId].present += 1;
-      }
-
       return acc;
     }, {});
 
@@ -148,15 +135,10 @@ router.get("/session", authMiddleWare, async (req, res) => {
           classInfo: student.classInfo,
           fatherName: student.fatherName,
           fatherContact: student.fatherContact,
-          status: attendanceMap[String(student._id)] || "",
-          percentage:
-            percentageMap[String(student._id)]?.total > 0
-              ? Math.round(
-                  (percentageMap[String(student._id)].present /
-                    percentageMap[String(student._id)].total) *
-                    100,
-                )
-              : 0,
+          status: attendanceMap[String(student._id)]?.status || "",
+          percentage: Math.round(
+            attendanceMap[String(student._id)]?.percentage || 0,
+          ),
         };
       })
       .filter(Boolean);
@@ -225,15 +207,16 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
       const getTotalLength = await Attendance.countDocuments({
         registration: registration._id,
         course: courseId,
-        });
-        const getPresentLength = await Attendance.countDocuments({
-          registration: registration._id,
-          course: courseId,
-            status: "present",
-        });
-        const percentage = getTotalLength > 0 ? (getPresentLength / getTotalLength) * 100 : 0;
-        saved.percentage = percentage;
-        await saved.save();
+      });
+      const getPresentLength = await Attendance.countDocuments({
+        registration: registration._id,
+        course: courseId,
+        status: "present",
+      });
+      const percentage =
+        getTotalLength > 0 ? (getPresentLength / getTotalLength) * 100 : 0;
+      saved.percentage = percentage;
+      await saved.save();
 
       savedRecords.push(saved);
     }
