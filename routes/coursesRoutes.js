@@ -4,14 +4,21 @@ const Course = require("../modals/Course");
 const authMiddleWare = require("../authMiddleWare");
 const router = express.Router();
 
-router.post("/addCourse", authMiddleWare,async (req, res) => {
-  const { title, description, teacherIds = [], classTarget = [] } = req.body;
+router.post("/addCourse", authMiddleWare, async (req, res) => {
+  const {
+    title,
+    description,
+    coursePrice = 0,
+    teacherIds = [],
+    classTarget = [],
+  } = req.body;
 
   try {
     // 1. Create the new course
     const newCourse = new Course({
       title,
       description,
+      coursePrice: Number(coursePrice) || 0,
       teachers: teacherIds, // Assigning the array of teacher IDs
       classTarget,
     });
@@ -58,9 +65,15 @@ router.get("/allCourses", authMiddleWare, async (req, res) => {
   }
 });
 
-router.put("/updateCourse/:id",authMiddleWare, async (req, res) => {
+router.put("/updateCourse/:id", authMiddleWare, async (req, res) => {
   const { id } = req.params;
-  const { title, description, teacherIds = [], classTarget = [] } = req.body;
+  const {
+    title,
+    description,
+    coursePrice = 0,
+    teacherIds = [],
+    classTarget = [],
+  } = req.body;
 
   try {
     const existingCourse = await Course.findById(id);
@@ -79,6 +92,7 @@ router.put("/updateCourse/:id",authMiddleWare, async (req, res) => {
 
     existingCourse.title = title;
     existingCourse.description = description;
+    existingCourse.coursePrice = Number(coursePrice) || 0;
     existingCourse.teachers = nextTeacherIds;
     existingCourse.classTarget = classTarget;
     await existingCourse.save();
@@ -116,7 +130,7 @@ router.put("/updateCourse/:id",authMiddleWare, async (req, res) => {
   }
 });
 
-router.delete("/deleteCourse/:id", authMiddleWare,async (req, res) => {
+router.delete("/deleteCourse/:id", authMiddleWare, async (req, res) => {
   const { id } = req.params;
 
   try {

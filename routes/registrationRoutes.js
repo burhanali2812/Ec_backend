@@ -1,4 +1,5 @@
 const express = require("express");
+const Course = require("../modals/Course");
 const Registration = require("../modals/Registration");
 const authMiddleWare = require("../authMiddleWare");
 const router = express.Router();
@@ -7,6 +8,7 @@ router.post("/register", authMiddleWare, async (req, res) => {
   const {
     courseIds = [],
     courses = [],
+    aboutCourse = [],
     institutionType,
     classInfo,
     studentId,
@@ -31,10 +33,45 @@ router.post("/register", authMiddleWare, async (req, res) => {
   }
 
   try {
+    const courseDocs = await Course.find(
+      { _id: { $in: selectedCourseIds } },
+      "_id coursePrice",
+    );
+
+    const priceMap = courseDocs.reduce((acc, c) => {
+      acc[String(c._id)] = Number(c.coursePrice || 0);
+      return acc;
+    }, {});
+
+    const discountedPriceMap = Array.isArray(aboutCourse)
+      ? aboutCourse.reduce((acc, item) => {
+          const courseId = String(item?.course || item?.courseId || "");
+          if (!courseId) return acc;
+          acc[courseId] = Number(
+            item?.courseDiscountedPrice ?? item?.discountedPrice,
+          );
+          return acc;
+        }, {})
+      : {};
+
+    const aboutCoursePayload = selectedCourseIds.map((courseId) => {
+      const actual = Number(priceMap[courseId] || 0);
+      const providedDiscount = discountedPriceMap[courseId];
+      const discounted = Number.isFinite(providedDiscount)
+        ? providedDiscount
+        : actual;
+
+      return {
+        course: courseId,
+        courseActualPrice: actual,
+        courseDiscountedPrice: discounted,
+      };
+    });
+
     const registration = await Registration.findOneAndUpdate(
       { student: studentId },
       {
-        course: selectedCourseIds,
+        aboutCourse: aboutCoursePayload,
         student: studentId,
         institutionType,
         classInfo,
@@ -62,13 +99,21 @@ router.get(
       const { studentId } = req.params;
       const registration = await Registration.findOne({
         student: studentId,
-      }).populate("course", "title description");
+      }).populate("aboutCourse.course", "title description coursePrice");
 
       if (!registration) {
-        return res.json({ success: true, courses: [] });
+        return res.json({ success: true, courses: [], aboutCourse: [] });
       }
 
-      return res.json({ success: true, courses: registration.course || [] });
+      const courses = (registration.aboutCourse || [])
+        .map((item) => item.course)
+        .filter(Boolean);
+
+      return res.json({
+        success: true,
+        courses,
+        aboutCourse: registration.aboutCourse || [],
+      });
     } catch (error) {
       return res.status(500).json({ message: "Server error", success: false });
     }
@@ -79,8 +124,10 @@ router.get("/myCourses", authMiddleWare, async (req, res) => {
   try {
     const registrations = await Registration.find({
       student: req.user.id,
-    }).populate("course");
-    const courses = registrations.flatMap((reg) => reg.course || []);
+    }).populate("aboutCourse.course");
+    const courses = registrations.flatMap((reg) =>
+      (reg.aboutCourse || []).map((item) => item.course).filter(Boolean),
+    );
     res.json({ courses, success: true });
   } catch (error) {
     res.status(500).json({ message: "Server error", success: false });
@@ -90,7 +137,7 @@ router.get("/myCourses", authMiddleWare, async (req, res) => {
 router.get("/allRegistrations", authMiddleWare, async (req, res) => {
   try {
     const registrations = await Registration.find()
-      .populate("course")
+      .populate("aboutCourse.course")
       .populate("student", "name email rollNumber classInfo");
     res.json({ registrations, success: true });
   } catch (error) {

@@ -4,6 +4,7 @@ const courseSchema = new mongoose.Schema({
   title: { type: String, required: true },
   description: { type: String, required: true },
   teachers: [{ type: mongoose.Schema.Types.ObjectId, ref: "Teacher" }],
+  coursePrice: { type: Number, default: 0, required: true },
   classTarget: [
     {
       teacher: {
