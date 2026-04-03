@@ -11,6 +11,7 @@ const teacherSchema = new mongoose.Schema({
   courses: [{ type: mongoose.Schema.Types.ObjectId, ref: "Course" }],
   profileImage: { type: String, default: null },
   createdAt: { type: Date, default: Date.now },
+
 });
 
 module.exports = mongoose.model("Teacher", teacherSchema);
