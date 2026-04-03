@@ -30,7 +30,7 @@ router.post("/signUp", authMiddleWare, async (req, res) => {
     );
 
     const institutionPrefix = institutionType === "Academy" ? "ECA" : "ECS";
-    const rollNumber = `${institutionPrefix}-${counter.seq}`;
+    const rollNumber = `${institutionPrefix}-1000${counter.seq}`;
 
     // 4. Password Generation
     const password = rollNumber + "@" + name.slice(0, 3);
