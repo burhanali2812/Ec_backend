@@ -121,9 +121,34 @@ router.get("/session", authMiddleWare, async (req, res) => {
       if (studentId) {
         acc[studentId] = {
           status: item.status,
-          percentage: item.percentage || 0,
         };
       }
+      return acc;
+    }, {});
+
+    const registrationIds = registrations.map(
+      (registration) => registration._id,
+    );
+    const allAttendanceDocs = registrationIds.length
+      ? await Attendance.find({
+          course: courseId,
+          registration: { $in: registrationIds },
+        }).select("registration status")
+      : [];
+
+    const registrationStatsMap = allAttendanceDocs.reduce((acc, item) => {
+      const registrationId = String(item.registration || "");
+      if (!registrationId) return acc;
+
+      if (!acc[registrationId]) {
+        acc[registrationId] = { total: 0, present: 0 };
+      }
+
+      acc[registrationId].total += 1;
+      if (item.status === "present") {
+        acc[registrationId].present += 1;
+      }
+
       return acc;
     }, {});
 
@@ -141,9 +166,14 @@ router.get("/session", authMiddleWare, async (req, res) => {
           fatherName: student.fatherName,
           fatherContact: student.fatherContact,
           status: attendanceMap[String(student._id)]?.status || "",
-          percentage: Math.round(
-            attendanceMap[String(student._id)]?.percentage || 0,
-          ),
+          percentage: (() => {
+            const stats = registrationStatsMap[String(registration._id)] || {
+              total: 0,
+              present: 0,
+            };
+            if (!stats.total) return 0;
+            return Math.round((stats.present / stats.total) * 100);
+          })(),
         };
       })
       .filter(Boolean);
