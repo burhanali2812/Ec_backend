@@ -3,30 +3,57 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const router = express.Router();
 const Student = require("../modals/Student");
+const Registration = require("../modals/Registration");
 const authMiddleWare = require("../authMiddleWare");
 const Counter = require("../modals/Counter"); // Import the counter model
 
 router.post("/signUp", authMiddleWare, async (req, res) => {
-  const { name, contact, email, gender, address, institutionType, classInfo, fatherName, fatherContact } = req.body;
+  const {
+    name,
+    contact,
+    email,
+    gender,
+    address,
+    institutionType,
+    classInfo,
+    fatherName,
+    fatherContact,
+  } = req.body;
 
   // 1. Validation
-  if (!name || !contact || !email || !gender || !address || !institutionType || !classInfo || !fatherName) {
-    return res.status(400).json({ message: "All fields are required", success: false });
+  if (
+    !name ||
+    !contact ||
+    !email ||
+    !gender ||
+    !address ||
+    !institutionType ||
+    !classInfo ||
+    !fatherName
+  ) {
+    return res
+      .status(400)
+      .json({ message: "All fields are required", success: false });
   }
 
   try {
     // 2. Strong Check for existing email (Roll number isn't generated yet)
     const existingStudent = await Student.findOne({ email });
     if (existingStudent) {
-      return res.status(400).json({ message: "Student with this email already exists", success: false });
+      return res
+        .status(400)
+        .json({
+          message: "Student with this email already exists",
+          success: false,
+        });
     }
 
     // 3. ATOMIC AUTO-INCREMENT LOGIC
     // This finds the "Academy" or "School" counter and adds 1 to 'seq'
     const counter = await Counter.findOneAndUpdate(
-      { id: institutionType }, 
-      { $inc: { seq: 1 } }, 
-      { new: true, upsert: true } // Create it if it doesn't exist
+      { id: institutionType },
+      { $inc: { seq: 1 } },
+      { new: true, upsert: true }, // Create it if it doesn't exist
     );
 
     const institutionPrefix = institutionType === "Academy" ? "ECA" : "ECS";
@@ -39,24 +66,32 @@ router.post("/signUp", authMiddleWare, async (req, res) => {
 
     // 5. Create Student
     const student = new Student({
-      name, contact, email, gender, address, classInfo, institutionType,
-      fatherName, fatherContact,
+      name,
+      contact,
+      email,
+      gender,
+      address,
+      classInfo,
+      institutionType,
+      fatherName,
+      fatherContact,
       password: hashedPassword,
       rollNumber,
     });
 
     await student.save();
 
-    res.status(201).json({ 
-      message: "Student created successfully", 
-      success: true, 
+    res.status(201).json({
+      message: "Student created successfully",
+      success: true,
       rollNumber, // Send this back so the admin knows the generated ID
-      password 
+      password,
     });
-
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Server error", success: false, error: error.message });
+    res
+      .status(500)
+      .json({ message: "Server error", success: false, error: error.message });
   }
 });
 
@@ -87,8 +122,16 @@ router.post("/login", async (req, res) => {
         .status(400)
         .json({ message: "Invalid credentials", success: false });
     }
-    // Generate token       
-     const token = jwt.sign({ id: student._id, role: "student", institutionType: student.institutionType }, process.env.JWT_SECRET, { expiresIn: "1h" });
+    // Generate token
+    const token = jwt.sign(
+      {
+        id: student._id,
+        role: "student",
+        institutionType: student.institutionType,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "1h" },
+    );
     res.json({ token, success: true, message: "Login successful" });
   } catch (error) {
     res.status(500).json({ message: "Server error", success: false });
@@ -164,12 +207,16 @@ router.get("/myProfile", authMiddleWare, async (req, res) => {
 
 router.delete("/deleteStudent/:id", authMiddleWare, async (req, res) => {
   try {
-    const student = await Student.findByIdAndDelete(req.params.id);
+    const studentId = req.params.id;
+    const student = await Student.findByIdAndDelete(studentId);
     if (!student) {
       return res
         .status(404)
         .json({ message: "Student not found", success: false });
     }
+
+    await Registration.deleteMany({ student: studentId });
+
     res.json({ message: "Student deleted successfully", success: true });
   } catch (error) {
     res.status(500).json({ message: "Server error", success: false });

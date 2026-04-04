@@ -6,6 +6,12 @@ const authMiddleWare = require("../authMiddleWare");
 
 const router = express.Router();
 
+const findTeacherAssignment = (course, teacherId) => {
+  return (course.assignments || []).find(
+    (item) => String(item?.teacher?._id || item?.teacher) === String(teacherId),
+  );
+};
+
 const startOfDay = (dateValue) => {
   const d = new Date(dateValue);
   d.setHours(0, 0, 0, 0);
@@ -20,9 +26,9 @@ const endOfDay = (dateValue) => {
 
 router.get("/myCourses", authMiddleWare, async (req, res) => {
   try {
-    const courses = await Course.find({ teachers: req.user.id })
-      .populate("teachers", "name email")
-      .populate("classTarget.teacher", "name email");
+    const courses = await Course.find({
+      "assignments.teacher": req.user.id,
+    }).populate("assignments.teacher", "name email");
 
     return res.json({ success: true, courses });
   } catch (error) {
@@ -34,7 +40,7 @@ router.get("/classes/:courseId", authMiddleWare, async (req, res) => {
   try {
     const { courseId } = req.params;
     const course = await Course.findById(courseId).populate(
-      "classTarget.teacher",
+      "assignments.teacher",
       "name email",
     );
 
@@ -45,22 +51,14 @@ router.get("/classes/:courseId", authMiddleWare, async (req, res) => {
     }
 
     const teacherId = String(req.user.id);
-    const isAssignedTeacher = (course.teachers || []).some(
-      (teacher) => String(teacher) === teacherId,
-    );
+    const teacherAssignment = findTeacherAssignment(course, teacherId);
 
-    if (!isAssignedTeacher) {
+    if (!teacherAssignment) {
       return res.status(403).json({ success: false, message: "Not allowed" });
     }
 
     const classes = [
-      ...new Set(
-        (course.classTarget || [])
-          .filter(
-            (item) => String(item.teacher?._id || item.teacher) === teacherId,
-          )
-          .flatMap((item) => item.classes || []),
-      ),
+      ...new Set((teacherAssignment.targetClasses || []).filter(Boolean)),
     ];
 
     return res.json({ success: true, classes, course });
@@ -88,11 +86,18 @@ router.get("/session", authMiddleWare, async (req, res) => {
     }
 
     const teacherId = String(req.user.id);
-    const isAssignedTeacher = (course.teachers || []).some(
-      (teacher) => String(teacher) === teacherId,
-    );
-    if (!isAssignedTeacher) {
+    const teacherAssignment = findTeacherAssignment(course, teacherId);
+    if (!teacherAssignment) {
       return res.status(403).json({ success: false, message: "Not allowed" });
+    }
+
+    const allowedClasses = new Set(
+      (teacherAssignment.targetClasses || []).map(String),
+    );
+    if (!allowedClasses.has(String(classInfo))) {
+      return res
+        .status(403)
+        .json({ success: false, message: "Class not assigned to you" });
     }
 
     const registrations = await Registration.find({
@@ -168,11 +173,18 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
     }
 
     const teacherId = String(req.user.id);
-    const isAssignedTeacher = (course.teachers || []).some(
-      (teacher) => String(teacher) === teacherId,
-    );
-    if (!isAssignedTeacher) {
+    const teacherAssignment = findTeacherAssignment(course, teacherId);
+    if (!teacherAssignment) {
       return res.status(403).json({ success: false, message: "Not allowed" });
+    }
+
+    const allowedClasses = new Set(
+      (teacherAssignment.targetClasses || []).map(String),
+    );
+    if (!allowedClasses.has(String(classInfo))) {
+      return res
+        .status(403)
+        .json({ success: false, message: "Class not assigned to you" });
     }
 
     const savedRecords = [];

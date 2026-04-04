@@ -4,31 +4,74 @@ const Course = require("../modals/Course");
 const authMiddleWare = require("../authMiddleWare");
 const router = express.Router();
 
+const normalizeAssignments = (
+  payloadAssignments = [],
+  fallbackClassTarget = [],
+) => {
+  const source =
+    Array.isArray(payloadAssignments) && payloadAssignments.length
+      ? payloadAssignments
+      : fallbackClassTarget;
+
+  return (Array.isArray(source) ? source : [])
+    .map((item) => {
+      const teacher = String(
+        item?.teacher?._id || item?.teacher || item?.teacherId || "",
+      ).trim();
+      const targetClasses = Array.isArray(item?.targetClasses)
+        ? item.targetClasses
+        : Array.isArray(item?.classes)
+          ? item.classes
+          : [];
+
+      return {
+        teacher,
+        targetClasses: [
+          ...new Set(
+            targetClasses.map((cls) => String(cls).trim()).filter(Boolean),
+          ),
+        ],
+      };
+    })
+    .filter((item) => item.teacher && item.targetClasses.length);
+};
+
+const getAssignmentTeacherIds = (assignments = []) => [
+  ...new Set(
+    (assignments || []).map((item) => String(item.teacher)).filter(Boolean),
+  ),
+];
+
 router.post("/addCourse", authMiddleWare, async (req, res) => {
   const {
     title,
     description,
     coursePrice = 0,
-    teacherIds = [],
+    assignments = [],
     classTarget = [],
   } = req.body;
 
   try {
-    // 1. Create the new course
+    const normalizedAssignments = normalizeAssignments(
+      assignments,
+      classTarget,
+    );
+    const teacherIds = getAssignmentTeacherIds(normalizedAssignments);
+
     const newCourse = new Course({
       title,
       description,
       coursePrice: Number(coursePrice) || 0,
-      teachers: teacherIds, // Assigning the array of teacher IDs
-      classTarget,
+      assignments: normalizedAssignments,
     });
     const savedCourse = await newCourse.save();
 
-    // 2. THE LINK: Update all selected teachers to include this course ID
-    await Teacher.updateMany(
-      { _id: { $in: teacherIds } },
-      { $push: { courses: savedCourse._id } },
-    );
+    if (teacherIds.length) {
+      await Teacher.updateMany(
+        { _id: { $in: teacherIds } },
+        { $addToSet: { courses: savedCourse._id } },
+      );
+    }
 
     res.status(201).json({
       message: "Course created and linked to teachers!",
@@ -44,10 +87,9 @@ router.post("/addCourse", authMiddleWare, async (req, res) => {
 
 router.get("/myCourses", authMiddleWare, async (req, res) => {
   try {
-    const courses = await Course.find({ "classTarget.teacher": req.user.id }).populate(
-      "teachers",
-      "name email",
-    );
+    const courses = await Course.find({
+      "assignments.teacher": req.user.id,
+    }).populate("assignments.teacher", "name email");
     res.json({ courses, success: true });
   } catch (error) {
     res.status(500).json({ message: "Server error", success: false });
@@ -56,9 +98,10 @@ router.get("/myCourses", authMiddleWare, async (req, res) => {
 
 router.get("/allCourses", authMiddleWare, async (req, res) => {
   try {
-    const courses = await Course.find()
-      .populate("teachers", "name email")
-      .populate("classTarget.teacher", "name email");
+    const courses = await Course.find().populate(
+      "assignments.teacher",
+      "name email",
+    );
     res.json({ courses, success: true });
   } catch (error) {
     res.status(500).json({ message: "Server error", success: false });
@@ -71,7 +114,7 @@ router.put("/updateCourse/:id", authMiddleWare, async (req, res) => {
     title,
     description,
     coursePrice = 0,
-    teacherIds = [],
+    assignments = [],
     classTarget = [],
   } = req.body;
 
@@ -83,18 +126,19 @@ router.put("/updateCourse/:id", authMiddleWare, async (req, res) => {
         .json({ message: "Course not found", success: false });
     }
 
-    const previousTeacherIds = (existingCourse.teachers || []).map((t) =>
-      String(t),
+    const normalizedAssignments = normalizeAssignments(
+      assignments,
+      classTarget,
     );
-    const nextTeacherIds = [
-      ...new Set((teacherIds || []).map((t) => String(t))),
-    ];
+    const previousTeacherIds = getAssignmentTeacherIds(
+      existingCourse.assignments || [],
+    );
+    const nextTeacherIds = getAssignmentTeacherIds(normalizedAssignments);
 
     existingCourse.title = title;
     existingCourse.description = description;
     existingCourse.coursePrice = Number(coursePrice) || 0;
-    existingCourse.teachers = nextTeacherIds;
-    existingCourse.classTarget = classTarget;
+    existingCourse.assignments = normalizedAssignments;
     await existingCourse.save();
 
     const removedTeacherIds = previousTeacherIds.filter(
@@ -141,10 +185,14 @@ router.delete("/deleteCourse/:id", authMiddleWare, async (req, res) => {
         .json({ message: "Course not found", success: false });
     }
 
-    await Teacher.updateMany(
-      { _id: { $in: course.teachers || [] } },
-      { $pull: { courses: course._id } },
-    );
+    const teacherIds = getAssignmentTeacherIds(course.assignments || []);
+
+    if (teacherIds.length) {
+      await Teacher.updateMany(
+        { _id: { $in: teacherIds } },
+        { $pull: { courses: course._id } },
+      );
+    }
 
     await Course.findByIdAndDelete(id);
 
