@@ -273,4 +273,69 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
   }
 });
 
+router.get("/studentStats/:courseId", authMiddleWare, async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const studentId = req.user.id;
+
+    const registration = await Registration.findOne({
+      student: studentId,
+      aboutCourse: { $elemMatch: { course: courseId } },
+    });
+
+    if (!registration) {
+      return res.status(404).json({
+        success: false,
+        message: "Student not registered for this course",
+      });
+    }
+
+    const attendanceDocs = await Attendance.find({
+      registration: registration._id,
+      course: courseId,
+    }).select("date status");
+
+    const total = attendanceDocs.length;
+    const present = attendanceDocs.filter(
+      (doc) => doc.status === "present",
+    ).length;
+    const absent = total - present;
+    const percentage = total > 0 ? Math.round((present / total) * 100) : 0;
+
+    const monthlyData = {};
+    attendanceDocs.forEach((doc) => {
+      const month = new Date(doc.date).toLocaleString("default", {
+        month: "short",
+      });
+      if (!monthlyData[month]) {
+        monthlyData[month] = { present: 0, absent: 0 };
+      }
+      if (doc.status === "present") {
+        monthlyData[month].present += 1;
+      } else {
+        monthlyData[month].absent += 1;
+      }
+    });
+
+    const chartData = Object.entries(monthlyData).map(([month, data]) => ({
+      month,
+      present: data.present,
+      absent: data.absent,
+    }));
+
+    return res.json({
+      success: true,
+      stats: {
+        total,
+        present,
+        absent,
+        percentage,
+      },
+      chartData,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
 module.exports = router;
