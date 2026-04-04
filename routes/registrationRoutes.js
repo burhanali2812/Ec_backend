@@ -124,12 +124,22 @@ router.get("/myCourses", authMiddleWare, async (req, res) => {
   try {
     const registrations = await Registration.find({
       student: req.user.id,
-    }).populate("aboutCourse.course");
+    }).populate({
+      path: "aboutCourse.course", // First level: Get course details
+      populate: {
+        path: "assignments.teacher", // Second level: Get teacher details inside course
+        select: "name email", // Only grab the name and email of the teacher
+      },
+    });
+
+    // Extract the courses and ensure teacher info is included
     const courses = registrations.flatMap((reg) =>
-      (reg.aboutCourse || []).map((item) => item.course).filter(Boolean),
+      (reg.aboutCourse || []).map((item) => item.course).filter(Boolean)
     );
+
     res.json({ courses, success: true });
   } catch (error) {
+    console.error(error);
     res.status(500).json({ message: "Server error", success: false });
   }
 });
