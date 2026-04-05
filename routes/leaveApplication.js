@@ -32,11 +32,11 @@ router.post("/applyLeave", authMiddleWare, async (req, res) => {
     }
 });
 
-router.get("/viewAppliedLeaveApplications/:id", authMiddleWare, async (req, res) => {
-    const { id } = req.params;
+router.get("/viewAppliedLeaveApplications/:role/:email", authMiddleWare, async (req, res) => {
+    const { role, email } = req.params;
     try {
         // Correct Chain: Find  -> Sort -> Then Await
-        const leaveApplications = await LeaveApplication.find({ applicant: id })
+        const leaveApplications = await LeaveApplication.find({ applicant: role === "teacher" ? "Teacher" : "Student", email })
             .sort({ appliedAt: -1 });
 
         res.json({ leaveApplications, success: true });
