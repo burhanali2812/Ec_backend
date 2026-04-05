@@ -32,9 +32,10 @@ router.post("/applyLeave", authMiddleWare, async (req, res) => {
     }
 });
 
-router.get("/viewLeaveApplications", authMiddleWare, async (req, res) => {
+router.get("/viewAppliedLeaveApplications/:id", authMiddleWare, async (req, res) => {
+    const { id } = req.params;
     try {
-        const leaveApplications = (await LeaveApplication.find({ status: "Pending" }).sort({ appliedAt: -1 })).populate("applicant", "name email");
+        const leaveApplications = (await LeaveApplication.find({ applicant: id, }).sort({ appliedAt: -1 })).populate("applicant", "name email");
         res.json({ leaveApplications });
     } catch (error) {
         res.status(500).json({ message: "Server error", success: false });
