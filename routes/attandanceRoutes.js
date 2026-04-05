@@ -185,9 +185,14 @@ router.get("/session", authMiddleWare, async (req, res) => {
 });
 
 router.post("/markAttendance", authMiddleWare, async (req, res) => {
-    if(req.user.role !== "teacher") {
-        return res.status(403).json({ message: "Unauthorized, You cannot mark attendance" , success: false });
-    }
+  if (req.user.role !== "teacher") {
+    return res
+      .status(403)
+      .json({
+        message: "Unauthorized, You cannot mark attendance",
+        success: false,
+      });
+  }
   try {
     const { courseId, classInfo, date, studentStatuses = [] } = req.body;
 
@@ -317,24 +322,73 @@ router.get("/studentStats/:courseId", authMiddleWare, async (req, res) => {
       }));
 
     const monthlyData = {};
+    const monthlyHistoryMap = {};
     attendanceDocs.forEach((doc) => {
-      const month = new Date(doc.date).toLocaleString("default", {
+      const dateObj = new Date(doc.date);
+      const month = dateObj.toLocaleString("default", {
         month: "short",
       });
-      if (!monthlyData[month]) {
-        monthlyData[month] = { present: 0, absent: 0 };
+      const monthLabel = dateObj.toLocaleString("default", {
+        month: "long",
+        year: "numeric",
+      });
+      const monthKey = `${dateObj.getFullYear()}-${String(
+        dateObj.getMonth() + 1,
+      ).padStart(2, "0")}`;
+
+      if (!monthlyHistoryMap[monthKey]) {
+        monthlyHistoryMap[monthKey] = [];
+      }
+
+      monthlyHistoryMap[monthKey].push({
+        rawDate: dateObj.toISOString(),
+        date: dateObj.toLocaleDateString("en-GB"),
+        status: doc.status,
+        dayLabel: dateObj.toLocaleDateString("en-GB", { day: "2-digit" }),
+      });
+
+      if (!monthlyData[monthKey]) {
+        monthlyData[monthKey] = {
+          month,
+          monthLabel,
+          present: 0,
+          absent: 0,
+          year: dateObj.getFullYear(),
+          monthNumber: dateObj.getMonth() + 1,
+        };
       }
       if (doc.status === "present") {
-        monthlyData[month].present += 1;
+        monthlyData[monthKey].present += 1;
       } else {
-        monthlyData[month].absent += 1;
+        monthlyData[monthKey].absent += 1;
       }
     });
 
-    const chartData = Object.entries(monthlyData).map(([month, data]) => ({
-      month,
-      present: data.present,
-      absent: data.absent,
+    const monthlyDetails = Object.entries(monthlyData)
+      .sort(([a], [b]) => String(b).localeCompare(String(a)))
+      .map(([, data]) => ({
+        month: data.month,
+        monthLabel: data.monthLabel,
+        present: data.present,
+        absent: data.absent,
+        total: data.present + data.absent,
+        year: data.year,
+        monthNumber: data.monthNumber,
+        history:
+          monthlyHistoryMap[
+            `${data.year}-${String(data.monthNumber).padStart(2, "0")}`
+          ]
+            ?.slice()
+            .sort(
+              (a, b) => new Date(a.rawDate).getTime() - new Date(b.rawDate).getTime(),
+            )
+            .map(({ rawDate, ...rest }) => rest) || [],
+      }));
+
+    const chartData = monthlyDetails.map((item) => ({
+      month: item.month,
+      present: item.present,
+      absent: item.absent,
     }));
 
     return res.json({
@@ -346,6 +400,7 @@ router.get("/studentStats/:courseId", authMiddleWare, async (req, res) => {
         percentage,
       },
       chartData,
+      monthlyDetails,
       recentAttendance,
     });
   } catch (error) {
