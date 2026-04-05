@@ -185,6 +185,9 @@ router.get("/session", authMiddleWare, async (req, res) => {
 });
 
 router.post("/markAttendance", authMiddleWare, async (req, res) => {
+    if(req.user.role !== "teacher") {
+        return res.status(403).json({ message: "Unauthorized, You cannot mark attendance" , success: false });
+    }
   try {
     const { courseId, classInfo, date, studentStatuses = [] } = req.body;
 
@@ -293,7 +296,9 @@ router.get("/studentStats/:courseId", authMiddleWare, async (req, res) => {
     const attendanceDocs = await Attendance.find({
       registration: registration._id,
       course: courseId,
-    }).select("date status").sort({ date: -1 });
+    })
+      .select("date status")
+      .sort({ date: -1 });
 
     const total = attendanceDocs.length;
     const present = attendanceDocs.filter(
@@ -303,10 +308,13 @@ router.get("/studentStats/:courseId", authMiddleWare, async (req, res) => {
     const percentage = total > 0 ? Math.round((present / total) * 100) : 0;
 
     // Get recent 30 attendance records
-    const recentAttendance = attendanceDocs.slice(0, 30).reverse().map(doc => ({
-      date: new Date(doc.date).toLocaleDateString('en-GB'),
-      status: doc.status
-    }));
+    const recentAttendance = attendanceDocs
+      .slice(0, 30)
+      .reverse()
+      .map((doc) => ({
+        date: new Date(doc.date).toLocaleDateString("en-GB"),
+        status: doc.status,
+      }));
 
     const monthlyData = {};
     attendanceDocs.forEach((doc) => {

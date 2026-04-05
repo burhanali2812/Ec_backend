@@ -1,0 +1,14 @@
+const mongoose = require("mongoose");
+
+const leaveApplicationSchema = new mongoose.Schema({
+    applicant : { type: String, enum: ["Student", "Teacher"], required: true },
+    name: { type: String, required: true },
+    email: { type: String, required: true },
+    reason: { type: String, required: true },
+    fromDate: { type: String, required: true }, // e.g., "2024-07-01"
+    toDate: { type: String, required: true }, // e.g., "2024-07-05"
+    status: { type: String, enum: ["Pending", "Approved", "Rejected"], default: "Pending" },
+    appliedAt: { type: Date, default: Date.now }
+});
+
+module.exports = mongoose.model("LeaveApplication", leaveApplicationSchema);

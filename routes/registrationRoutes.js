@@ -5,6 +5,9 @@ const authMiddleWare = require("../authMiddleWare");
 const router = express.Router();
 
 router.post("/register", authMiddleWare, async (req, res) => {
+    if(req.user.role !== "admin") {
+        return res.status(403).json({ message: "Unauthorized, You cannot register students" , success: false });
+    }
   const {
     courseIds = [],
     courses = [],
