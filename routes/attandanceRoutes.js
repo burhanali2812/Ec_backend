@@ -186,12 +186,10 @@ router.get("/session", authMiddleWare, async (req, res) => {
 
 router.post("/markAttendance", authMiddleWare, async (req, res) => {
   if (req.user.role !== "teacher") {
-    return res
-      .status(403)
-      .json({
-        message: "Unauthorized, You cannot mark attendance",
-        success: false,
-      });
+    return res.status(403).json({
+      message: "Unauthorized, You cannot mark attendance",
+      success: false,
+    });
   }
   try {
     const { courseId, classInfo, date, studentStatuses = [] } = req.body;
@@ -380,7 +378,8 @@ router.get("/studentStats/:courseId", authMiddleWare, async (req, res) => {
           ]
             ?.slice()
             .sort(
-              (a, b) => new Date(a.rawDate).getTime() - new Date(b.rawDate).getTime(),
+              (a, b) =>
+                new Date(a.rawDate).getTime() - new Date(b.rawDate).getTime(),
             )
             .map(({ rawDate, ...rest }) => rest) || [],
       }));
