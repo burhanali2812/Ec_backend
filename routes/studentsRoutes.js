@@ -130,7 +130,7 @@ router.post("/login", async (req, res) => {
         institutionType: student.institutionType,
       },
       process.env.JWT_SECRET,
-      { expiresIn: "1h" },
+      { expiresIn: "20d" },
     );
     res.json({ token, success: true, message: "Login successful" });
   } catch (error) {
