@@ -5,6 +5,7 @@ const leaveApplicationSchema = new mongoose.Schema({
     name: { type: String, required: true },
     email: { type: String, required: true },
     reason: { type: String, required: true },
+    rejectedReason: { type: String },
     fromDate: { type: String, required: true }, // e.g., "2024-07-01"
     toDate: { type: String, required: true }, // e.g., "2024-07-05"
     status: { type: String, enum: ["Pending", "Approved", "Rejected"], default: "Pending" },
