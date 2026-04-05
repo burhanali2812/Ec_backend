@@ -35,9 +35,13 @@ router.post("/applyLeave", authMiddleWare, async (req, res) => {
 router.get("/viewAppliedLeaveApplications/:id", authMiddleWare, async (req, res) => {
     const { id } = req.params;
     try {
-        const leaveApplications = (await LeaveApplication.find({ applicant: id, }).sort({ appliedAt: -1 })).populate("applicant", "name email");
-        res.json({ leaveApplications });
+        // Correct Chain: Find  -> Sort -> Then Await
+        const leaveApplications = await LeaveApplication.find({ applicant: id })
+            .sort({ appliedAt: -1 });
+
+        res.json({ leaveApplications, success: true });
     } catch (error) {
+        console.error("Leave Fetch Error:", error); // Log this to see details in terminal
         res.status(500).json({ message: "Server error", success: false });
     }
 });
