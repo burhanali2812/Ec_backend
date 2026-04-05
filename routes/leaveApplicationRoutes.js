@@ -87,6 +87,24 @@ router.get("/allLeaveApplications", authMiddleWare, async (req, res) => {
     res.status(500).json({ message: "Server error", success: false });
   }
 });
+router.get("/lengthOfPendingLeaves", authMiddleWare, async (req, res) => {
+  if (req.user.role !== "admin") {
+    return res
+      .status(403)
+      .json({
+        message: "Unauthorized, You cannot view pending leave statistics",
+        success: false,
+      });
+  }
+  try {
+    const pendingLeaves = await LeaveApplication.countDocuments({ status: "Pending" });
+    res.json({ pendingLeaves, success: true });
+  } catch (error) {
+    console.error("Error fetching pending leaves:", error);
+    res.status(500).json({ message: "Server error", success: false });
+  }
+});
+
 router.put("/leaveApplications/:id", authMiddleWare, async (req, res) => {
   const { id } = req.params;
   const { status, rejectedReason } = req.body;
