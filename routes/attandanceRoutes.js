@@ -121,10 +121,13 @@ router.get("/session", authMiddleWare, async (req, res) => {
       if (studentId) {
         acc[studentId] = {
           status: item.status,
+          topic: item.topic || "",
         };
       }
       return acc;
     }, {});
+
+    const sessionTopic = attendanceDocs[0]?.topic || "";
 
     const registrationIds = registrations.map(
       (registration) => registration._id,
@@ -178,7 +181,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
       })
       .filter(Boolean);
 
-    return res.json({ success: true, students, course });
+    return res.json({ success: true, students, course, topic: sessionTopic });
   } catch (error) {
     return res.status(500).json({ success: false, message: "Server error" });
   }
@@ -192,12 +195,19 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
     });
   }
   try {
-    const { courseId, classInfo, date, studentStatuses = [] } = req.body;
+    const { courseId, classInfo, date, topic, studentStatuses = [] } = req.body;
 
-    if (!courseId || !classInfo || !date || !Array.isArray(studentStatuses)) {
+    if (
+      !courseId ||
+      !classInfo ||
+      !date ||
+      !Array.isArray(studentStatuses) ||
+      !String(topic || "").trim()
+    ) {
       return res.status(400).json({
         success: false,
-        message: "courseId, classInfo, date and studentStatuses are required",
+        message:
+          "courseId, classInfo, date, topic and studentStatuses are required",
       });
     }
 
@@ -246,6 +256,7 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
           registration: registration._id,
           course: courseId,
           date: day,
+          topic: String(topic).trim(),
           status,
           markedBy: req.user.id,
           verificationStatus: "pending",
@@ -300,7 +311,7 @@ router.get("/studentStats/:courseId", authMiddleWare, async (req, res) => {
       registration: registration._id,
       course: courseId,
     })
-      .select("date status")
+      .select("date status topic")
       .sort({ date: -1 });
 
     const total = attendanceDocs.length;
@@ -317,6 +328,7 @@ router.get("/studentStats/:courseId", authMiddleWare, async (req, res) => {
       .map((doc) => ({
         date: new Date(doc.date).toLocaleDateString("en-GB"),
         status: doc.status,
+        topic: doc.topic || "",
       }));
 
     const monthlyData = {};
@@ -342,6 +354,7 @@ router.get("/studentStats/:courseId", authMiddleWare, async (req, res) => {
         rawDate: dateObj.toISOString(),
         date: dateObj.toLocaleDateString("en-GB"),
         status: doc.status,
+        topic: doc.topic || "",
         dayLabel: dateObj.toLocaleDateString("en-GB", { day: "2-digit" }),
       });
 

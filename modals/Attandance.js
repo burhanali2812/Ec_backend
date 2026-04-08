@@ -4,6 +4,7 @@ const attendanceSchema = new mongoose.Schema({
     registration: { type: mongoose.Schema.Types.ObjectId, ref: "Registration", required: true },
     course: { type: mongoose.Schema.Types.ObjectId, ref: "Course", required: true }, // NEW
     date: { type: Date, required: true },
+    topic: { type: String, required: true },
     status: { type: String, enum: ["present", "absent"], required: true },
     percentage: { type: Number, default: 0 },
     verificationStatus: {
