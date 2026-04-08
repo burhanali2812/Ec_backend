@@ -1,6 +1,7 @@
 const express = require("express");
 const Course = require("../modals/Course");
 const TimeTable = require("../modals/TimeTable");
+const Registration = require("../modals/Registration");
 const authMiddleWare = require("../authMiddleWare");
 
 const router = express.Router();
@@ -266,6 +267,76 @@ router.delete("/deleteTimeTableEntry/:id", authMiddleWare, async (req, res) => {
   } catch (error) {
     console.error("Timetable delete error:", error);
     return res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+
+
+
+
+router.get("/viewTimeTable", authMiddleWare, async (req, res) => {
+  try {
+
+    if (!req.user || req.user.role !== "student") {
+      return res.status(403).json({
+        success: false,
+        message: "Only students can view timetable"
+      });
+    }
+
+    const studentId = req.user.id;
+
+
+    const registration = await Registration.findOne({ student: studentId });
+
+    if (!registration || !registration.aboutCourse.length) {
+      return res.json({
+        success: true,
+        timeTables: []
+      });
+    }
+
+ 
+    const courseIds = registration.aboutCourse.map(item => item.course);
+
+    const entries = await TimeTable.find({
+      course: { $in: courseIds },
+      dayOfWeek: { $ne: "Sunday" },
+    })
+      .populate("course", "title")
+      .populate("teacher", "name")
+      .lean();
+
+
+    const DAY_ORDER = {
+      Monday: 1,
+      Tuesday: 2,
+      Wednesday: 3,
+      Thursday: 4,
+      Friday: 5,
+      Saturday: 6,
+      Sunday: 7
+    };
+
+    const sortedEntries = entries.sort((a, b) => {
+      const dayDiff =
+        (DAY_ORDER[a.dayOfWeek] || 99) - (DAY_ORDER[b.dayOfWeek] || 99);
+      if (dayDiff !== 0) return dayDiff;
+
+      return a.startTime.localeCompare(b.startTime);
+    });
+
+    return res.json({
+      success: true,
+      timeTables: sortedEntries
+    });
+
+  } catch (error) {
+    console.error("Timetable fetch error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
   }
 });
 
