@@ -28,7 +28,14 @@ const isAdmin = (req, res) => {
 
 const normalizeId = (value) => String(value || "").trim();
 
-const buildConflictQuery = ({ id, course, teacher, dayOfWeek, startTime, endTime }) => ({
+const buildConflictQuery = ({
+  id,
+  course,
+  teacher,
+  dayOfWeek,
+  startTime,
+  endTime,
+}) => ({
   ...(id ? { _id: { $ne: id } } : {}),
   dayOfWeek,
   startTime: { $lt: endTime },
@@ -68,7 +75,8 @@ router.get("/allTimeTables", authMiddleWare, async (req, res) => {
       .lean();
 
     const sortedEntries = entries.sort((a, b) => {
-      const dayDiff = (DAY_ORDER[a.dayOfWeek] || 99) - (DAY_ORDER[b.dayOfWeek] || 99);
+      const dayDiff =
+        (DAY_ORDER[a.dayOfWeek] || 99) - (DAY_ORDER[b.dayOfWeek] || 99);
       if (dayDiff !== 0) return dayDiff;
       return String(a.startTime).localeCompare(String(b.startTime));
     });
@@ -110,7 +118,9 @@ router.post("/addTimeTableEntry", authMiddleWare, async (req, res) => {
 
     const pairCheck = await verifyCourseTeacherPair(course, teacher);
     if (!pairCheck.ok) {
-      return res.status(400).json({ success: false, message: pairCheck.message });
+      return res
+        .status(400)
+        .json({ success: false, message: pairCheck.message });
     }
 
     const conflict = await TimeTable.findOne(
@@ -181,16 +191,27 @@ router.put("/updateTimeTableEntry/:id", authMiddleWare, async (req, res) => {
 
     const existing = await TimeTable.findById(id);
     if (!existing) {
-      return res.status(404).json({ success: false, message: "Timetable entry not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Timetable entry not found" });
     }
 
     const pairCheck = await verifyCourseTeacherPair(course, teacher);
     if (!pairCheck.ok) {
-      return res.status(400).json({ success: false, message: pairCheck.message });
+      return res
+        .status(400)
+        .json({ success: false, message: pairCheck.message });
     }
 
     const conflict = await TimeTable.findOne(
-      buildConflictQuery({ id, course, teacher, dayOfWeek, startTime, endTime }),
+      buildConflictQuery({
+        id,
+        course,
+        teacher,
+        dayOfWeek,
+        startTime,
+        endTime,
+      }),
     );
 
     if (conflict) {
@@ -233,7 +254,9 @@ router.delete("/deleteTimeTableEntry/:id", authMiddleWare, async (req, res) => {
     const deleted = await TimeTable.findByIdAndDelete(id);
 
     if (!deleted) {
-      return res.status(404).json({ success: false, message: "Timetable entry not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Timetable entry not found" });
     }
 
     return res.json({
