@@ -31,6 +31,7 @@ app.use("/api/registration", require("./routes/registrationRoutes"));
 app.use("/api/students", require("./routes/studentsRoutes"));
 app.use("/api/attendance", require("./routes/attandanceRoutes"));
 app.use("/api/leave", require("./routes/leaveApplicationRoutes"));
+app.use("/api/timetable", require("./routes/timeTableRoutes"));
 connectDB().then(() => {
   app.listen(PORT, () => {
     console.log(`Server Running on PORT ${PORT}`);
