@@ -270,34 +270,27 @@ router.delete("/deleteTimeTableEntry/:id", authMiddleWare, async (req, res) => {
   }
 });
 
-
-
-
-
 router.get("/viewTimeTable", authMiddleWare, async (req, res) => {
   try {
-
     if (!req.user || req.user.role !== "student") {
       return res.status(403).json({
         success: false,
-        message: "Only students can view timetable"
+        message: "Only students can view timetable",
       });
     }
 
     const studentId = req.user.id;
-
 
     const registration = await Registration.findOne({ student: studentId });
 
     if (!registration || !registration.aboutCourse.length) {
       return res.json({
         success: true,
-        timeTables: []
+        timeTables: [],
       });
     }
 
- 
-    const courseIds = registration.aboutCourse.map(item => item.course);
+    const courseIds = registration.aboutCourse.map((item) => item.course);
 
     const entries = await TimeTable.find({
       course: { $in: courseIds },
@@ -307,7 +300,6 @@ router.get("/viewTimeTable", authMiddleWare, async (req, res) => {
       .populate("teacher", "name")
       .lean();
 
-
     const DAY_ORDER = {
       Monday: 1,
       Tuesday: 2,
@@ -315,7 +307,7 @@ router.get("/viewTimeTable", authMiddleWare, async (req, res) => {
       Thursday: 4,
       Friday: 5,
       Saturday: 6,
-      Sunday: 7
+      Sunday: 7,
     };
 
     const sortedEntries = entries.sort((a, b) => {
@@ -328,14 +320,13 @@ router.get("/viewTimeTable", authMiddleWare, async (req, res) => {
 
     return res.json({
       success: true,
-      timeTables: sortedEntries
+      timeTables: sortedEntries,
     });
-
   } catch (error) {
     console.error("Timetable fetch error:", error);
     return res.status(500).json({
       success: false,
-      message: "Server error"
+      message: "Server error",
     });
   }
 });
