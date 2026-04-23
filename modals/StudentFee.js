@@ -1,49 +1,49 @@
 const mongoose = require("mongoose");
 
 const studentFeeSchema = new mongoose.Schema({
-    registration: { 
-        type: mongoose.Schema.Types.ObjectId, 
-        ref: "Registration", 
-        required: true 
-    },
+  registration: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: "Registration", 
+    required: true 
+  },
 
-    month: { 
-        type: String, 
-        required: true // e.g. "2026-03"
-    },
+  month: { 
+    type: String, 
+    required: true
+  },
 
-    actualFee: { 
-        type: Number, 
-        required: true // 2000 or 8000
-    },
+  actualFee: { 
+    type: Number, 
+    required: true
+  },
 
-    discount: { 
-        type: Number, 
-        default: 0 
-    },
+  discount: { 
+    type: Number, 
+    default: 0 
+  },
 
-    finalFee: { 
-        type: Number, 
-        required: true // actualFee - discount
-    },
+  finalFee: { 
+    type: Number, 
+    required: true
+  },
 
-    amountPaid: { 
-        type: Number, 
-        default: 0 
-    },
+  amountPaid: { 
+    type: Number, 
+    default: 0 
+  },
 
-    remainingFee: { 
-        type: Number, 
-        required: true 
-    },
+  remainingFee: { 
+    type: Number, 
+    required: true 
+  },
 
-    status: { 
-        type: String, 
-        enum: ["paid", "partial", "unpaid"], 
-        default: "unpaid" 
-    },
+  status: { 
+    type: String, 
+    enum: ["paid", "partial", "unpaid"], 
+    default: "unpaid" 
+  },
 
-    paidAt: Date
-});
+  paidAt: Date
+}, { timestamps: true });
 
 module.exports = mongoose.model("StudentFee", studentFeeSchema);

@@ -5,6 +5,7 @@ const router = express.Router();
 const Student = require("../modals/Student");
 const Registration = require("../modals/Registration");
 const authMiddleWare = require("../authMiddleWare");
+const StudentFee = require("../modals/StudentFee");
 const Counter = require("../modals/Counter"); // Import the counter model
 
 router.post("/signUp", authMiddleWare, async (req, res) => {
@@ -267,4 +268,144 @@ router.put("/updateStudent/:id", authMiddleWare, async (req, res) => {
   }
 });
 
+router.post("/studentFee", authMiddleWare, async (req, res) => {
+  const { registrationId } = req.body;
+
+ 
+
+  try {
+    const registration = await Registration.findById(registrationId);
+
+    const currentMonth = new Date().toLocaleString("default", {
+      month: "long",
+      year: "numeric"
+    });
+
+    const existingFee = await StudentFee.findOne({
+      registration: registration._id,
+      month: currentMonth
+    });
+
+    if (existingFee) {
+      return res.status(400).json({
+        message: "Fee already generated for this month",
+        success: false
+      });
+    }
+
+    const actualFee = registration.aboutCourse.reduce(
+      (sum, item) => sum + item.courseActualPrice,
+      0
+    );
+
+    const finalFee = registration.aboutCourse.reduce(
+      (sum, item) => sum + item.courseDiscountedPrice,
+      0
+    );
+
+    const discount = actualFee - finalFee;
+
+    const studentFee = new StudentFee({
+      registration: registration._id,
+      month: currentMonth,
+      actualFee,
+      discount,
+      finalFee,
+      remainingFee: finalFee,
+      amountPaid: 0,
+      status: "unpaid"
+    });
+
+    await studentFee.save();
+
+    res.status(200).json({
+      message: "Student fee generated successfully!",
+      success: true,
+      studentFee
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      message: "Error occurred while saving student fee",
+      success: false
+    });
+  }
+});
+
+router.post("/payStudentFee", authMiddleWare, async (req, res) => {
+  const { feeId, amountPaid } = req.body;
+
+  if (!feeId || !amountPaid) {
+    return res.status(400).json({
+      message: "feeId and amountPaid are required",
+      success: false
+    });
+  }
+
+  try {
+    const studentFee = await StudentFee.findById(feeId);
+
+    if (!studentFee) {
+      return res.status(404).json({
+        message: "Student fee record not found",
+        success: false
+      });
+    }
+
+    studentFee.amountPaid += amountPaid;
+    studentFee.remainingFee = studentFee.finalFee - studentFee.amountPaid;
+
+    if (studentFee.remainingFee <= 0) {
+      studentFee.status = "paid";
+      studentFee.remainingFee = 0;
+      studentFee.paidAt = new Date();
+    } else {
+      studentFee.status = "partial";
+    }
+
+    await studentFee.save();
+
+    res.status(200).json({
+      message: "Fee payment updated successfully",
+      success: true,
+      studentFee
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      message: "Error occurred while updating payment",
+      success: false
+    });
+  }
+});
+router.get("/getStudentFee/:studentId", authMiddleWare, async (req, res) => {
+  const { studentId } = req.params;
+
+  try {
+    const registration = await Registration.findOne({ student: studentId });
+
+    if (!registration) {
+      return res.status(404).json({
+        message: "Registration not found",
+        success: false
+      });
+    }
+
+    const fees = await StudentFee.find({
+      registration: registration._id
+    }).sort({ createdAt: -1 });
+
+    res.status(200).json({
+      message: "Student fee records fetched successfully",
+      success: true,
+      fees
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      message: "Error occurred while fetching student fee records",
+      success: false
+    });
+  }
+});
 module.exports = router;
