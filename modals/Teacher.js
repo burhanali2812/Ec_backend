@@ -10,6 +10,7 @@ const teacherSchema = new mongoose.Schema({
   institutionType: { type: String, enum: ["academy", "school"], required: true, default: "academy" },
   courses: [{ type: mongoose.Schema.Types.ObjectId, ref: "Course" }],
   profileImage: { type: String, default: null },
+  salary: { type: Number, required: true },
   createdAt: { type: Date, default: Date.now },
 
 });

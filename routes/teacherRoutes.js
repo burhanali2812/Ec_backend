@@ -7,8 +7,8 @@ const authMiddleWare = require("../authMiddleWare");
 const router = express.Router();
 
 router.post("/signUp", async(req,res)=>{{
-    const {name, contact, email, cnic, address, institutionType} = req.body;
-    if(!name || !contact || !email || !cnic || !address || !institutionType){
+    const {name, contact, email, cnic, address, institutionType, salary} = req.body;
+    if(!name || !contact || !email || !cnic || !address || !institutionType || !salary){
         return res.status(400).json({ message: "All fields are required", success: false });
     }
     try {
@@ -21,7 +21,7 @@ router.post("/signUp", async(req,res)=>{{
         const password = cnic.slice(-6) + "@" + name.slice(0, 3); 
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
-        teacher = new Teacher({ name, contact, email, cnic, password: hashedPassword, address , institutionType});
+        teacher = new Teacher({ name, contact, email, cnic, password: hashedPassword, address , institutionType, salary });
         await teacher.save();
         res.status(201).json({ message: "Teacher created successfully", success: true });
     } catch (error) {
@@ -90,8 +90,8 @@ router.delete("/deleteTeacher/:id", authMiddleWare, async(req,res)=>{
 });
 
 router.put("/updateTeacher/:id", authMiddleWare, async(req,res)=>{
-    const {name, contact, email, cnic, address, institutionType} = req.body;
-    if(!name || !contact || !email || !cnic || !address || !institutionType){
+    const {name, contact, email, cnic, address, institutionType, salary} = req.body;
+    if(!name || !contact || !email || !cnic || !address || !institutionType || !salary){
         return res.status(400).json({ message: "All fields are required", success: false });
     }
     try {
@@ -103,6 +103,7 @@ router.put("/updateTeacher/:id", authMiddleWare, async(req,res)=>{
         teacher.contact = contact;
         teacher.email = email;
         teacher.cnic = cnic;
+        teacher.salary = salary;
         teacher.address = address;
         teacher.institutionType = institutionType;
         await teacher.save();
