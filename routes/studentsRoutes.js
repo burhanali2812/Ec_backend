@@ -332,8 +332,10 @@ router.post("/studentFee", authMiddleWare, async (req, res) => {
   }
 });
 
-router.post("/payStudentFee", authMiddleWare, async (req, res) => {
-  const { feeId, amountPaid } = req.body;
+router.post("/payStudentFee/:feeId", authMiddleWare, async (req, res) => {
+
+  const {amountPaid } = req.body;
+  const { feeId } = req.params;
 
   if (!feeId || !amountPaid) {
     return res.status(400).json({
