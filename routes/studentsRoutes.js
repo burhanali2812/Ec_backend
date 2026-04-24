@@ -332,7 +332,7 @@ router.post("/studentFee", authMiddleWare, async (req, res) => {
   }
 });
 
-router.post("/payStudentFee/:feeId", authMiddleWare, async (req, res) => {
+router.put("/payStudentFee/:feeId", authMiddleWare, async (req, res) => {
 
   const {amountPaid } = req.body;
   const { feeId } = req.params;
