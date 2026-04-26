@@ -327,7 +327,8 @@ router.post("/studentFee", authMiddleWare, async (req, res) => {
   } catch (error) {
     res.status(500).json({
       message: "Error occurred while saving student fee",
-      success: false
+      success: false,
+      error: error.message
     });
   }
 });
