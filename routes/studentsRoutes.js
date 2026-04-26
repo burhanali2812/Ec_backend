@@ -276,14 +276,19 @@ router.post("/studentFee", authMiddleWare, async (req, res) => {
   try {
     const registration = await Registration.findById(registrationId);
 
-    const currentMonth = new Date().toLocaleString("default", {
+    const currentDate = new Date();
+    const currentMonth = currentDate.toLocaleString("default", {
       month: "long",
       year: "numeric"
     });
 
+    // Format month as "YYYY-MM" for database consistency
+    const monthString = String(currentDate.getMonth() + 1).padStart(2, "0");
+    const monthKey = `${currentDate.getFullYear()}-${monthString}`;
+
     const existingFee = await StudentFee.findOne({
       registration: registration._id,
-      month: currentMonth
+      month: monthKey
     });
 
     if (existingFee) {
@@ -305,15 +310,22 @@ router.post("/studentFee", authMiddleWare, async (req, res) => {
 
     const discount = actualFee - finalFee;
 
+    // Calculate due date (6th of current month, or 6th of next month if past 6th)
+    let dueDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 6);
+    if (currentDate.getDate() > 6) {
+      dueDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 6);
+    }
+
     const studentFee = new StudentFee({
       registration: registration._id,
-      month: currentMonth,
+      month: monthKey,
       actualFee,
       discount,
       finalFee,
       remainingFee: finalFee,
       amountPaid: 0,
-      status: "unpaid"
+      status: "unpaid",
+      dueDate: dueDate
     });
 
     await studentFee.save();
