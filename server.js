@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const express = require("express");
 const cors = require("cors");
+const cron = require("node-cron");
 require("dotenv").config();
 
 const app = express();
@@ -33,6 +34,63 @@ app.use("/api/attendance", require("./routes/attandanceRoutes"));
 app.use("/api/leave", require("./routes/leaveApplicationRoutes"));
 app.use("/api/timetable", require("./routes/timeTableRoutes"));
 app.use("/api/results", require("./routes/resultRoutes"));
+
+// Cron job to generate monthly fees on 1st of every month
+cron.schedule("0 0 1 * *", async () => {
+  try {
+    const Registration = require("./modals/Registration");
+    const StudentFee = require("./modals/StudentFee");
+    const Course = require("./modals/Course");
+
+    // Get all registrations
+    const registrations = await Registration.find().populate("course");
+
+    for (const registration of registrations) {
+      const currentDate = new Date();
+      const currentMonth = currentDate.getMonth() + 1;
+      const currentYear = currentDate.getFullYear();
+      const monthString = String(currentMonth).padStart(2, "0");
+      const month = `${currentYear}-${monthString}`;
+
+      // Check if fee already exists for this month
+      const existingFee = await StudentFee.findOne({
+        registration: registration._id,
+        month: month,
+      });
+
+      if (!existingFee && registration.course) {
+        // Calculate due date (6th of current month, or 6th of next month if past 6th)
+        let dueDate = new Date(currentYear, currentMonth - 1, 6);
+        if (currentDate.getDate() > 6) {
+          dueDate = new Date(currentYear, currentMonth, 6);
+        }
+
+        // Create new fee entry
+        const courseDetails = await Course.findById(registration.course);
+        const actualFee = courseDetails ? courseDetails.fee : 0;
+
+        const newFee = new StudentFee({
+          registration: registration._id,
+          month: month,
+          actualFee: actualFee,
+          discount: 0,
+          finalFee: actualFee,
+          amountPaid: 0,
+          remainingFee: actualFee,
+          status: "pending",
+          dueDate: dueDate,
+        });
+
+        await newFee.save();
+      }
+    }
+
+    console.log("Monthly fees generated successfully");
+  } catch (error) {
+    console.error("Error generating monthly fees:", error);
+  }
+});
+
 connectDB().then(() => {
   app.listen(PORT, () => {
     console.log(`Server Running on PORT ${PORT}`);

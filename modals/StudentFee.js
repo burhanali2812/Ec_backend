@@ -43,6 +43,11 @@ const studentFeeSchema = new mongoose.Schema({
     default: "unpaid" 
   },
 
+  dueDate: {
+    type: Date,
+    required: true
+  },
+
   paidAt: Date
 }, { timestamps: true });
 
