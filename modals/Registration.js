@@ -12,6 +12,6 @@ const registrationSchema = new mongoose.Schema({
     student: { type: mongoose.Schema.Types.ObjectId, ref: "Student", required: true },
     institutionType: { type: String, enum: ["Academy", "School"], required: true },
     classInfo: { type: String, required: true },
-})
+}, { timestamps: true })
 
 module.exports = mongoose.model("Registration", registrationSchema);

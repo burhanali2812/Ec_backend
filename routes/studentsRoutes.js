@@ -274,11 +274,18 @@ router.post("/studentFee", authMiddleWare, async (req, res) => {
 
     const currentDate = new Date();
     const registrationDate = new Date(registration.createdAt);
-    const dayOfMonth = registrationDate.getDate();
+    
+    // Get the day of month when student was registered
+    const regDayOfMonth = registrationDate.getDate();
+    const regMonth = registrationDate.getMonth();
+    const regYear = registrationDate.getFullYear();
+    
+    const currentMonth = currentDate.getMonth();
+    const currentYear = currentDate.getFullYear();
 
     // Format month as "YYYY-MM" for database consistency
-    const monthString = String(currentDate.getMonth() + 1).padStart(2, "0");
-    const monthKey = `${currentDate.getFullYear()}-${monthString}`;
+    const monthString = String(currentMonth + 1).padStart(2, "0");
+    const monthKey = `${currentYear}-${monthString}`;
 
     const existingFee = await StudentFee.findOne({
       registration: registration._id,
@@ -304,21 +311,16 @@ router.post("/studentFee", authMiddleWare, async (req, res) => {
 
     const discount = actualFee - finalFee;
 
-    // Determine if registration is after 10th of month
+    // Determine if registration is after 10th of the CURRENT month (same month as registration)
     let calculatedFee = finalFee;
     let calculatedActualFee = actualFee;
     let calculatedDiscount = discount;
 
-    if (dayOfMonth > 10) {
-      // Prorated fee: from registration date to 30th of that month
-      const registrationMonth = registrationDate.getMonth();
-      const registrationYear = registrationDate.getFullYear();
-      const lastDayOfMonth = new Date(
-        registrationYear,
-        registrationMonth + 1,
-        0,
-      ).getDate();
-      const daysRemaining = lastDayOfMonth - dayOfMonth + 1;
+    // Check if registration is in current month and after 10th
+    if (regMonth === currentMonth && regYear === currentYear && regDayOfMonth > 10) {
+      // Prorated fee: from registration date to last day of that month
+      const lastDayOfMonth = new Date(regYear, regMonth + 1, 0).getDate();
+      const daysRemaining = lastDayOfMonth - regDayOfMonth + 1;
       const totalDaysInMonth = lastDayOfMonth;
 
       const prorationRatio = daysRemaining / totalDaysInMonth;
