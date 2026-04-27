@@ -274,12 +274,12 @@ router.post("/studentFee", authMiddleWare, async (req, res) => {
 
     const currentDate = new Date();
     const registrationDate = new Date(registration.createdAt);
-    
+
     // Get the day of month when student was registered
     const regDayOfMonth = registrationDate.getDate();
     const regMonth = registrationDate.getMonth();
     const regYear = registrationDate.getFullYear();
-    
+
     const currentMonth = currentDate.getMonth();
     const currentYear = currentDate.getFullYear();
 
@@ -287,17 +287,11 @@ router.post("/studentFee", authMiddleWare, async (req, res) => {
     const monthString = String(currentMonth + 1).padStart(2, "0");
     const monthKey = `${currentYear}-${monthString}`;
 
-    const existingFee = await StudentFee.findOne({
+    // Delete existing fee for this month to allow recalculation when courses change
+    await StudentFee.deleteOne({
       registration: registration._id,
       month: monthKey,
     });
-
-    if (existingFee) {
-      return res.status(400).json({
-        message: "Fee already generated for this month",
-        success: false,
-      });
-    }
 
     const actualFee = registration.aboutCourse.reduce(
       (sum, item) => sum + item.courseActualPrice,
@@ -317,7 +311,11 @@ router.post("/studentFee", authMiddleWare, async (req, res) => {
     let calculatedDiscount = discount;
 
     // Check if registration is in current month and after 10th
-    if (regMonth === currentMonth && regYear === currentYear && regDayOfMonth > 10) {
+    if (
+      regMonth === currentMonth &&
+      regYear === currentYear &&
+      regDayOfMonth > 10
+    ) {
       // Prorated fee: from registration date to last day of that month
       const lastDayOfMonth = new Date(regYear, regMonth + 1, 0).getDate();
       const daysRemaining = lastDayOfMonth - regDayOfMonth + 1;
