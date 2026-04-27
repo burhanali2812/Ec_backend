@@ -273,12 +273,26 @@ router.post("/studentFee", authMiddleWare, async (req, res) => {
     const registration = await Registration.findById(registrationId);
 
     const currentDate = new Date();
-    const registrationDate = new Date(registration.createdAt);
+    // Use createdAt if available, otherwise use current date
+    let registrationDate = registration.createdAt
+      ? new Date(registration.createdAt)
+      : currentDate;
 
     // Get the day of month when student was registered
-    const regDayOfMonth = registrationDate.getDate();
-    const regMonth = registrationDate.getMonth();
-    const regYear = registrationDate.getFullYear();
+    let regDayOfMonth = registrationDate.getDate();
+    let regMonth = registrationDate.getMonth();
+    let regYear = registrationDate.getFullYear();
+
+    console.log(
+      "Registration Date:",
+      registrationDate,
+      "Day:",
+      regDayOfMonth,
+      "Month:",
+      regMonth,
+      "Year:",
+      regYear,
+    );
 
     // Format month as "YYYY-MM" for database consistency - use REGISTRATION month, not current month
     const monthString = String(regMonth + 1).padStart(2, "0");
@@ -312,24 +326,42 @@ router.post("/studentFee", authMiddleWare, async (req, res) => {
     let proratedToDate = null;
 
     // Check if registration is after 10th of any month - apply proration for that month
+    console.log(
+      "Proration Check: regDayOfMonth(",
+      regDayOfMonth,
+      ") > 10?",
+      regDayOfMonth > 10,
+    );
+
     if (regDayOfMonth > 10) {
+      console.log("✓ PRORATION TRIGGERED - Day", regDayOfMonth);
       // Prorated fee: from registration date to last day of that month
       const lastDayOfMonth = new Date(regYear, regMonth + 1, 0).getDate();
       const daysRemaining = lastDayOfMonth - regDayOfMonth + 1;
       const totalDaysInMonth = lastDayOfMonth;
 
+      console.log(
+        `Proration Details: Last day of month: ${lastDayOfMonth}, Days remaining: ${daysRemaining}, Total days: ${totalDaysInMonth}`,
+      );
+
       // Calculate per-day fee and prorated amount
       const perDayFee = finalFee / totalDaysInMonth;
       calculatedFee = Math.round(perDayFee * daysRemaining);
-      
+
       const perDayActualFee = actualFee / totalDaysInMonth;
       calculatedActualFee = Math.round(perDayActualFee * daysRemaining);
       calculatedDiscount = calculatedActualFee - calculatedFee;
+
+      console.log(
+        `Fee Calculation: perDayFee: ${perDayFee.toFixed(2)}, calculatedFee: ${calculatedFee}`,
+      );
 
       isProrated = true;
       proratedDays = daysRemaining;
       proratedFromDate = registrationDate;
       proratedToDate = new Date(regYear, regMonth + 1, 0); // Last day of month
+    } else {
+      console.log("✗ NO PRORATION - Day", regDayOfMonth, "is <= 10");
     }
 
     // Calculate due date: 5 days after voucher generation date
