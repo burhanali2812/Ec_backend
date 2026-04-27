@@ -280,12 +280,9 @@ router.post("/studentFee", authMiddleWare, async (req, res) => {
     const regMonth = registrationDate.getMonth();
     const regYear = registrationDate.getFullYear();
 
-    const currentMonth = currentDate.getMonth();
-    const currentYear = currentDate.getFullYear();
-
-    // Format month as "YYYY-MM" for database consistency
-    const monthString = String(currentMonth + 1).padStart(2, "0");
-    const monthKey = `${currentYear}-${monthString}`;
+    // Format month as "YYYY-MM" for database consistency - use REGISTRATION month, not current month
+    const monthString = String(regMonth + 1).padStart(2, "0");
+    const monthKey = `${regYear}-${monthString}`;
 
     // Delete existing fee for this month to allow recalculation when courses change
     await StudentFee.deleteOne({
