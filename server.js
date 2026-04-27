@@ -59,13 +59,11 @@ cron.schedule("0 0 1 * *", async () => {
       });
 
       if (!existingFee && registration.course) {
-        // Calculate due date (6th of current month, or 6th of next month if past 6th)
-        let dueDate = new Date(currentYear, currentMonth - 1, 6);
-        if (currentDate.getDate() > 6) {
-          dueDate = new Date(currentYear, currentMonth, 6);
-        }
+        // Calculate due date: 5 days after today
+        const dueDate = new Date();
+        dueDate.setDate(dueDate.getDate() + 5);
 
-        // Create new fee entry
+        // Create new fee entry for full month (not prorated for monthly generation)
         const courseDetails = await Course.findById(registration.course);
         const actualFee = courseDetails ? courseDetails.fee : 0;
 

@@ -41,12 +41,10 @@ router.post("/signUp", authMiddleWare, async (req, res) => {
     // 2. Strong Check for existing email (Roll number isn't generated yet)
     const existingStudent = await Student.findOne({ email });
     if (existingStudent) {
-      return res
-        .status(400)
-        .json({
-          message: "Student with this email already exists",
-          success: false,
-        });
+      return res.status(400).json({
+        message: "Student with this email already exists",
+        success: false,
+      });
     }
 
     // 3. ATOMIC AUTO-INCREMENT LOGIC
@@ -271,16 +269,12 @@ router.put("/updateStudent/:id", authMiddleWare, async (req, res) => {
 router.post("/studentFee", authMiddleWare, async (req, res) => {
   const { registrationId } = req.body;
 
- 
-
   try {
     const registration = await Registration.findById(registrationId);
 
     const currentDate = new Date();
-    const currentMonth = currentDate.toLocaleString("default", {
-      month: "long",
-      year: "numeric"
-    });
+    const registrationDate = new Date(registration.createdAt);
+    const dayOfMonth = registrationDate.getDate();
 
     // Format month as "YYYY-MM" for database consistency
     const monthString = String(currentDate.getMonth() + 1).padStart(2, "0");
@@ -288,44 +282,65 @@ router.post("/studentFee", authMiddleWare, async (req, res) => {
 
     const existingFee = await StudentFee.findOne({
       registration: registration._id,
-      month: monthKey
+      month: monthKey,
     });
 
     if (existingFee) {
       return res.status(400).json({
         message: "Fee already generated for this month",
-        success: false
+        success: false,
       });
     }
 
     const actualFee = registration.aboutCourse.reduce(
       (sum, item) => sum + item.courseActualPrice,
-      0
+      0,
     );
 
     const finalFee = registration.aboutCourse.reduce(
       (sum, item) => sum + item.courseDiscountedPrice,
-      0
+      0,
     );
 
     const discount = actualFee - finalFee;
 
-    // Calculate due date (6th of current month, or 6th of next month if past 6th)
-    let dueDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 6);
-    if (currentDate.getDate() > 6) {
-      dueDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 6);
+    // Determine if registration is after 10th of month
+    let calculatedFee = finalFee;
+    let calculatedActualFee = actualFee;
+    let calculatedDiscount = discount;
+
+    if (dayOfMonth > 10) {
+      // Prorated fee: from registration date to 30th of that month
+      const registrationMonth = registrationDate.getMonth();
+      const registrationYear = registrationDate.getFullYear();
+      const lastDayOfMonth = new Date(
+        registrationYear,
+        registrationMonth + 1,
+        0,
+      ).getDate();
+      const daysRemaining = lastDayOfMonth - dayOfMonth + 1;
+      const totalDaysInMonth = lastDayOfMonth;
+
+      const prorationRatio = daysRemaining / totalDaysInMonth;
+      calculatedFee = Math.round(finalFee * prorationRatio);
+      calculatedActualFee = Math.round(actualFee * prorationRatio);
+      calculatedDiscount = calculatedActualFee - calculatedFee;
     }
+
+    // Calculate due date: 5 days after voucher generation date
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + 5);
 
     const studentFee = new StudentFee({
       registration: registration._id,
       month: monthKey,
-      actualFee,
-      discount,
-      finalFee,
-      remainingFee: finalFee,
+      actualFee: calculatedActualFee,
+      discount: calculatedDiscount,
+      finalFee: calculatedFee,
+      remainingFee: calculatedFee,
       amountPaid: 0,
       status: "unpaid",
-      dueDate: dueDate
+      dueDate: dueDate,
     });
 
     await studentFee.save();
@@ -333,27 +348,25 @@ router.post("/studentFee", authMiddleWare, async (req, res) => {
     res.status(200).json({
       message: "Student fee generated successfully!",
       success: true,
-      studentFee
+      studentFee,
     });
-
   } catch (error) {
     res.status(500).json({
       message: "Error occurred while saving student fee",
       success: false,
-      error: error.message
+      error: error.message,
     });
   }
 });
 
 router.put("/payStudentFee/:feeId", authMiddleWare, async (req, res) => {
-
-  const {amountPaid } = req.body;
+  const { amountPaid } = req.body;
   const { feeId } = req.params;
 
   if (!feeId || !amountPaid) {
     return res.status(400).json({
       message: "feeId and amountPaid are required",
-      success: false
+      success: false,
     });
   }
 
@@ -363,7 +376,7 @@ router.put("/payStudentFee/:feeId", authMiddleWare, async (req, res) => {
     if (!studentFee) {
       return res.status(404).json({
         message: "Student fee record not found",
-        success: false
+        success: false,
       });
     }
 
@@ -383,13 +396,12 @@ router.put("/payStudentFee/:feeId", authMiddleWare, async (req, res) => {
     res.status(200).json({
       message: "Fee payment updated successfully",
       success: true,
-      studentFee
+      studentFee,
     });
-
   } catch (error) {
     res.status(500).json({
       message: "Error occurred while updating payment",
-      success: false
+      success: false,
     });
   }
 });
@@ -402,24 +414,23 @@ router.get("/getStudentFee/:studentId", authMiddleWare, async (req, res) => {
     if (!registration) {
       return res.status(404).json({
         message: "Registration not found",
-        success: false
+        success: false,
       });
     }
 
     const fees = await StudentFee.find({
-      registration: registration._id
+      registration: registration._id,
     }).sort({ createdAt: -1 });
 
     res.status(200).json({
       message: "Student fee records fetched successfully",
       success: true,
-      fees
+      fees,
     });
-
   } catch (error) {
     res.status(500).json({
       message: "Error occurred while fetching student fee records",
-      success: false
+      success: false,
     });
   }
 });
