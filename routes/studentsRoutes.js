@@ -305,7 +305,7 @@ router.post("/studentFee", authMiddleWare, async (req, res) => {
 
     const discount = actualFee - finalFee;
 
-    // Determine if registration is after 10th of the CURRENT month (same month as registration)
+    // Determine if registration is after 10th of the month
     let calculatedFee = finalFee;
     let calculatedActualFee = actualFee;
     let calculatedDiscount = discount;
@@ -314,12 +314,8 @@ router.post("/studentFee", authMiddleWare, async (req, res) => {
     let proratedFromDate = null;
     let proratedToDate = null;
 
-    // Check if registration is in current month and after 10th
-    if (
-      regMonth === currentMonth &&
-      regYear === currentYear &&
-      regDayOfMonth > 10
-    ) {
+    // Check if registration is after 10th of any month - apply proration for that month
+    if (regDayOfMonth > 10) {
       // Prorated fee: from registration date to last day of that month
       const lastDayOfMonth = new Date(regYear, regMonth + 1, 0).getDate();
       const daysRemaining = lastDayOfMonth - regDayOfMonth + 1;
