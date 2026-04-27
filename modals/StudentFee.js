@@ -49,6 +49,27 @@ const studentFeeSchema = new mongoose.Schema(
       required: true,
     },
 
+    // Proration fields
+    isProrated: {
+      type: Boolean,
+      default: false,
+    },
+
+    proratedDays: {
+      type: Number,
+      default: null,
+    },
+
+    proratedFromDate: {
+      type: Date,
+      default: null,
+    },
+
+    proratedToDate: {
+      type: Date,
+      default: null,
+    },
+
     paidAt: Date,
   },
   { timestamps: true },

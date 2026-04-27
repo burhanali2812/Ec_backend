@@ -309,6 +309,10 @@ router.post("/studentFee", authMiddleWare, async (req, res) => {
     let calculatedFee = finalFee;
     let calculatedActualFee = actualFee;
     let calculatedDiscount = discount;
+    let isProrated = false;
+    let proratedDays = null;
+    let proratedFromDate = null;
+    let proratedToDate = null;
 
     // Check if registration is in current month and after 10th
     if (
@@ -321,10 +325,18 @@ router.post("/studentFee", authMiddleWare, async (req, res) => {
       const daysRemaining = lastDayOfMonth - regDayOfMonth + 1;
       const totalDaysInMonth = lastDayOfMonth;
 
-      const prorationRatio = daysRemaining / totalDaysInMonth;
-      calculatedFee = Math.round(finalFee * prorationRatio);
-      calculatedActualFee = Math.round(actualFee * prorationRatio);
+      // Calculate per-day fee and prorated amount
+      const perDayFee = finalFee / totalDaysInMonth;
+      calculatedFee = Math.round(perDayFee * daysRemaining);
+      
+      const perDayActualFee = actualFee / totalDaysInMonth;
+      calculatedActualFee = Math.round(perDayActualFee * daysRemaining);
       calculatedDiscount = calculatedActualFee - calculatedFee;
+
+      isProrated = true;
+      proratedDays = daysRemaining;
+      proratedFromDate = registrationDate;
+      proratedToDate = new Date(regYear, regMonth + 1, 0); // Last day of month
     }
 
     // Calculate due date: 5 days after voucher generation date
@@ -341,6 +353,10 @@ router.post("/studentFee", authMiddleWare, async (req, res) => {
       amountPaid: 0,
       status: "unpaid",
       dueDate: dueDate,
+      isProrated: isProrated,
+      proratedDays: proratedDays,
+      proratedFromDate: proratedFromDate,
+      proratedToDate: proratedToDate,
     });
 
     await studentFee.save();
