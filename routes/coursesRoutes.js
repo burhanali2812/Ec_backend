@@ -43,9 +43,14 @@ const getAssignmentTeacherIds = (assignments = []) => [
 ];
 
 router.post("/addCourse", authMiddleWare, async (req, res) => {
-    if(req.user.role !== "admin") {
-        return res.status(403).json({ message: "Unauthorized, You cannot add courses" , success: false });
-    }
+  if (req.user.role !== "admin") {
+    return res
+      .status(403)
+      .json({
+        message: "Unauthorized, You cannot add courses",
+        success: false,
+      });
+  }
   const {
     title,
     description,
@@ -112,9 +117,14 @@ router.get("/allCourses", authMiddleWare, async (req, res) => {
 });
 
 router.put("/updateCourse/:id", authMiddleWare, async (req, res) => {
-    if(req.user.role !== "admin") {
-        return res.status(403).json({ message: "Unauthorized, You cannot update courses" , success: false });
-    }
+  if (req.user.role !== "admin") {
+    return res
+      .status(403)
+      .json({
+        message: "Unauthorized, You cannot update courses",
+        success: false,
+      });
+  }
   const { id } = req.params;
   const {
     title,
@@ -181,9 +191,14 @@ router.put("/updateCourse/:id", authMiddleWare, async (req, res) => {
 });
 
 router.delete("/deleteCourse/:id", authMiddleWare, async (req, res) => {
-      if(req.user.role !== "admin") {
-        return res.status(403).json({ message: "Unauthorized, You cannot delete courses" , success: false });
-      }
+  if (req.user.role !== "admin") {
+    return res
+      .status(403)
+      .json({
+        message: "Unauthorized, You cannot delete courses",
+        success: false,
+      });
+  }
   const { id } = req.params;
 
   try {

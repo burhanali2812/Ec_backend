@@ -70,12 +70,10 @@ router.get(
 
 router.get("/allLeaveApplications", authMiddleWare, async (req, res) => {
   if (req.user.role !== "admin") {
-    return res
-      .status(403)
-      .json({
-        message: "Unauthorized, You cannot view all leave applications",
-        success: false,
-      });
+    return res.status(403).json({
+      message: "Unauthorized, You cannot view all leave applications",
+      success: false,
+    });
   }
   try {
     const leaveApplications = await LeaveApplication.find().sort({
@@ -89,15 +87,15 @@ router.get("/allLeaveApplications", authMiddleWare, async (req, res) => {
 });
 router.get("/lengthOfPendingLeaves", authMiddleWare, async (req, res) => {
   if (req.user.role !== "admin") {
-    return res
-      .status(403)
-      .json({
-        message: "Unauthorized, You cannot view pending leave statistics",
-        success: false,
-      });
+    return res.status(403).json({
+      message: "Unauthorized, You cannot view pending leave statistics",
+      success: false,
+    });
   }
   try {
-    const pendingLeaves = await LeaveApplication.countDocuments({ status: "Pending" });
+    const pendingLeaves = await LeaveApplication.countDocuments({
+      status: "Pending",
+    });
     res.json({ pendingLeaves, success: true });
   } catch (error) {
     console.error("Error fetching pending leaves:", error);
@@ -109,12 +107,10 @@ router.put("/leaveApplications/:id", authMiddleWare, async (req, res) => {
   const { id } = req.params;
   const { status, rejectedReason } = req.body;
   if (req.user.role !== "admin") {
-    return res
-      .status(403)
-      .json({
-        message: "Unauthorized, You cannot update leave applications",
-        success: false,
-      });
+    return res.status(403).json({
+      message: "Unauthorized, You cannot update leave applications",
+      success: false,
+    });
   }
   if (!["Pending", "Approved", "Rejected"].includes(status)) {
     return res.status(400).json({ message: "Invalid status value" });
@@ -165,7 +161,7 @@ router.get("/myLeaves", authMiddleWare, async (req, res) => {
     }).sort({ appliedAt: -1 });
 
     const pendingCount = leaves.filter(
-      (leave) => leave.status === "Pending"
+      (leave) => leave.status === "Pending",
     ).length;
 
     return res.json({
