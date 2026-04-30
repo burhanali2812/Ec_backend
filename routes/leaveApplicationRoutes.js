@@ -147,4 +147,40 @@ router.put("/leaveApplications/:id", authMiddleWare, async (req, res) => {
   }
 });
 
+// Get leaves for the logged-in teacher
+router.get("/myLeaves", authMiddleWare, async (req, res) => {
+  if (req.user.role !== "teacher") {
+    return res.status(403).json({
+      message: "Unauthorized, Only teachers can view their leaves",
+      success: false,
+    });
+  }
+
+  try {
+    const teacherEmail = req.user.email;
+
+    const leaves = await LeaveApplication.find({
+      applicant: "Teacher",
+      email: teacherEmail,
+    }).sort({ appliedAt: -1 });
+
+    const pendingCount = leaves.filter(
+      (leave) => leave.status === "Pending"
+    ).length;
+
+    return res.json({
+      success: true,
+      leaves: leaves || [],
+      pendingCount,
+    });
+  } catch (error) {
+    console.error("Error fetching teacher leaves:", error);
+    return res.status(500).json({
+      message: "Error fetching leaves",
+      success: false,
+      error,
+    });
+  }
+});
+
 module.exports = router;

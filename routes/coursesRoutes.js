@@ -212,4 +212,37 @@ router.delete("/deleteCourse/:id", authMiddleWare, async (req, res) => {
       .json({ message: "Error deleting course", success: false, error });
   }
 });
+
+// Get courses for the logged-in teacher
+router.get("/getTeacherCourses", authMiddleWare, async (req, res) => {
+  if (req.user.role !== "teacher") {
+    return res.status(403).json({
+      message: "Unauthorized, Only teachers can view their courses",
+      success: false,
+    });
+  }
+
+  try {
+    const teacherId = req.user.id;
+
+    // Find all courses where this teacher is assigned
+    const courses = await Course.find({
+      "assignments.teacher": teacherId,
+    });
+
+    return res.json({
+      success: true,
+      courses: courses || [],
+      totalCourses: courses?.length || 0,
+    });
+  } catch (error) {
+    console.error("Error fetching teacher courses:", error);
+    return res.status(500).json({
+      message: "Error fetching courses",
+      success: false,
+      error,
+    });
+  }
+});
+
 module.exports = router;
