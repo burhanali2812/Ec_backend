@@ -259,5 +259,22 @@ router.get("/getTeacherCourses", authMiddleWare, async (req, res) => {
     });
   }
 });
+router.get("/getAllCourses", authMiddleWare, async (req, res) => {
+  try {
+    const courses = await Course.find();
+    return res.json({
+      success: true,
+      courses: courses || [],
+      totalCourses: courses?.length || 0,
+    });
+  } catch (error) {
+    console.error("Error fetching courses:", error);
+    return res.status(500).json({
+      message: "Error fetching courses",
+      success: false,
+      error,
+    });
+  }
+});
 
 module.exports = router;
