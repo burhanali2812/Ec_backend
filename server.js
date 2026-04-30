@@ -40,10 +40,10 @@ cron.schedule("0 0 1 * *", async () => {
   try {
     const Registration = require("./modals/Registration");
     const StudentFee = require("./modals/StudentFee");
-    const Course = require("./modals/Course");
 
     // Get all registrations
-    const registrations = await Registration.find().populate("course");
+    const registrations =
+      await Registration.find().populate("aboutCourse.course");
 
     for (const registration of registrations) {
       const currentDate = new Date();
@@ -58,34 +58,52 @@ cron.schedule("0 0 1 * *", async () => {
         month: month,
       });
 
-      if (!existingFee && registration.course) {
+      if (
+        !existingFee &&
+        registration.aboutCourse &&
+        registration.aboutCourse.length > 0
+      ) {
         // Calculate due date: 5 days after today
         const dueDate = new Date();
         dueDate.setDate(dueDate.getDate() + 5);
 
-        // Create new fee entry for full month (not prorated for monthly generation)
-        const courseDetails = await Course.findById(registration.course);
-        const actualFee = courseDetails ? courseDetails.fee : 0;
+        // Calculate total fee from all courses using discounted prices
+        const finalFee = registration.aboutCourse.reduce(
+          (sum, item) => sum + (item.courseDiscountedPrice || 0),
+          0,
+        );
+        const actualFee = registration.aboutCourse.reduce(
+          (sum, item) => sum + (item.courseActualPrice || 0),
+          0,
+        );
+        const discount = actualFee - finalFee;
 
         const newFee = new StudentFee({
           registration: registration._id,
           month: month,
           actualFee: actualFee,
-          discount: 0,
-          finalFee: actualFee,
+          discount: discount,
+          finalFee: finalFee,
           amountPaid: 0,
-          remainingFee: actualFee,
-          status: "pending",
+          remainingFee: finalFee,
+          status: "unpaid",
           dueDate: dueDate,
+          isProrated: false,
+          proratedDays: null,
+          proratedFromDate: null,
+          proratedToDate: null,
         });
 
         await newFee.save();
+        console.log(
+          `✓ Fee created for registration ${registration._id} for month ${month}`,
+        );
       }
     }
 
-    console.log("Monthly fees generated successfully");
+    console.log("✓ Monthly fees generated successfully for month", month);
   } catch (error) {
-    console.error("Error generating monthly fees:", error);
+    console.error("✗ Error generating monthly fees:", error);
   }
 });
 
