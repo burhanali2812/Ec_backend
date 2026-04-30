@@ -2,7 +2,8 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const express = require("express");
 const Teacher = require("../modals/Teacher");
-// const Registration = require("../modals/Registration");
+const Course = require("../modals/Course");
+const Registration = require("../modals/Registration");
 const authMiddleWare = require("../authMiddleWare");
 const router = express.Router();
 
@@ -110,6 +111,55 @@ router.put("/updateTeacher/:id", authMiddleWare, async(req,res)=>{
         res.json({ message: "Teacher updated successfully", success: true });
     } catch (error) {
         res.status(500).json({ message: "Server error", success: false });
+    }
+});
+
+// Get total students for the logged-in teacher
+router.get("/totalStudents", authMiddleWare, async(req,res)=>{
+    if (req.user.role !== "teacher") {
+        return res.status(403).json({
+            message: "Unauthorized, Only teachers can view their students",
+            success: false,
+        });
+    }
+
+    try {
+        const teacherId = req.user.id;
+
+        // Find all courses where this teacher is assigned
+        const courses = await Course.find({
+            "assignments.teacher": teacherId,
+        });
+
+        if (!courses || courses.length === 0) {
+            return res.json({
+                success: true,
+                totalStudents: 0,
+            });
+        }
+
+        const courseIds = courses.map((course) => course._id);
+
+        // Find all registrations for these courses and get unique students
+        const registrations = await Registration.find({
+            course: { $in: courseIds },
+        }).populate("student");
+
+        // Get unique student IDs
+        const uniqueStudentIds = [...new Set(registrations.map((reg) => String(reg.student?._id || reg.student)))];
+
+        return res.json({
+            success: true,
+            totalStudents: uniqueStudentIds.length,
+            courseCount: courses.length,
+        });
+    } catch (error) {
+        console.error("Error fetching teacher students:", error);
+        return res.status(500).json({
+            message: "Error fetching students count",
+            success: false,
+            error,
+        });
     }
 });
 
