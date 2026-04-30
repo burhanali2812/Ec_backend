@@ -2,13 +2,13 @@ const mongoose = require("mongoose");
 const express = require("express");
 const cors = require("cors");
 const cron = require("node-cron");
-const authMiddleWare = require("./middleware/authMiddleware");
+// const authMiddleWare = require("./middleware/authMiddleware");
 require("dotenv").config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use(authMiddleWare);
+// app.use(authMiddleWare);
 
 const PORT = process.env.PORT || 3000;
 app.get("/", (req, res) => {
