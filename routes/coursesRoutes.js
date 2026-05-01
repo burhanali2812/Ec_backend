@@ -277,4 +277,45 @@ router.get("/getAllCourses", authMiddleWare, async (req, res) => {
   }
 });
 
+// Get courses by class
+router.get("/getClassCourses/:className", authMiddleWare, async (req, res) => {
+  try {
+     if(req.user.role !== "admin") {
+      return res.status(403).json({
+        message: "Unauthorized, Only admins can fetch class attendance",
+        success: false,
+      });
+    }
+    const { className } = req.params;
+
+    if (!className) {
+      return res.status(400).json({
+        message: "Class name is required",
+        success: false,
+      });
+    }
+
+    // Find all courses that have this class in their assignments
+    const courses = await Course.find({
+      "assignments.targetClasses": className,
+    })
+      .select("_id title description coursePrice assignments")
+      .populate("assignments.teacher", "name email");
+
+    res.status(200).json({
+      message: "Courses fetched successfully",
+      success: true,
+      courses: courses || [],
+      count: courses.length,
+    });
+  } catch (error) {
+    console.error("Error fetching class courses:", error);
+    return res.status(500).json({
+      message: "Error fetching courses",
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
 module.exports = router;

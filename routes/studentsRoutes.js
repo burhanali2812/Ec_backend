@@ -535,4 +535,43 @@ router.get("/getStudentFee/:studentId", authMiddleWare, async (req, res) => {
     });
   }
 });
+
+// Get students by class
+router.get("/getStudentsByClass/:className", authMiddleWare, async (req, res) => {
+  try {
+     if(req.user.role !== "admin") {
+      return res.status(403).json({
+        message: "Unauthorized, Only admins can fetch class attendance",
+        success: false,
+      });
+    }
+    const { className } = req.params;
+
+    if (!className) {
+      return res.status(400).json({
+        message: "Class name is required",
+        success: false,
+      });
+    }
+
+    const students = await Student.find(
+      { classInfo: className },
+      { name: 1, rollNumber: 1, email: 1, fatherContact: 1, classInfo: 1 }
+    );
+
+    res.status(200).json({
+      message: "Students fetched successfully",
+      success: true,
+      students,
+      count: students.length,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Error occurred while fetching students",
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
 module.exports = router;

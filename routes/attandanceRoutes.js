@@ -420,4 +420,99 @@ router.get("/studentStats/:courseId", authMiddleWare, async (req, res) => {
   }
 });
 
+// Get class attendance with filters
+router.get("/getClassAttendance/:className", authMiddleWare, async (req, res) => {
+  try {
+    if(req.user.role !== "admin") {
+      return res.status(403).json({
+        message: "Unauthorized, Only admins can fetch class attendance",
+        success: false,
+      });
+    }
+    const { className } = req.params;
+    const { startDate, endDate, course } = req.query;
+
+    if (!className) {
+      return res.status(400).json({
+        message: "Class name is required",
+        success: false,
+      });
+    }
+
+    // Build date filter
+    let dateFilter = {};
+    if (startDate || endDate) {
+      dateFilter.date = {};
+      if (startDate) {
+        dateFilter.date.$gte = new Date(startDate);
+        dateFilter.date.$gte.setHours(0, 0, 0, 0);
+      }
+      if (endDate) {
+        dateFilter.date.$lte = new Date(endDate);
+        dateFilter.date.$lte.setHours(23, 59, 59, 999);
+      }
+    }
+
+    // Get all students in this class
+    const Student = require("../modals/Student");
+    const students = await Student.find({ classInfo: className });
+    const studentIds = students.map((s) => s._id);
+
+    // Get registrations for these students
+    const registrations = await Registration.find({
+      student: { $in: studentIds },
+    });
+    const registrationIds = registrations.map((r) => r._id);
+
+    // Build attendance filter
+    let attendanceFilter = {
+      registration: { $in: registrationIds },
+      ...dateFilter,
+    };
+
+    // Add course filter if specified
+    if (course && course !== "all") {
+      attendanceFilter.course = course;
+    }
+
+    // Fetch attendance records with populated data
+    const attendanceRecords = await Attendance.find(attendanceFilter)
+      .populate({
+        path: "registration",
+        select: "student",
+        populate: {
+          path: "student",
+          select: "name rollNumber classInfo",
+        },
+      })
+      .populate("course", "title")
+      .sort({ date: -1 });
+
+    // Format the response data
+    const formattedAttendance = attendanceRecords.map((record) => ({
+      _id: record._id,
+      studentName: record.registration?.student?.name || "N/A",
+      rollNumber: record.registration?.student?.rollNumber || "N/A",
+      courseName: record.course?.title || "N/A",
+      date: record.date,
+      status: record.status,
+      notes: record.topic || "",
+    }));
+
+    res.status(200).json({
+      message: "Attendance records fetched successfully",
+      success: true,
+      attendance: formattedAttendance,
+      count: formattedAttendance.length,
+    });
+  } catch (error) {
+    console.error("Error fetching attendance:", error);
+    return res.status(500).json({
+      message: "Error fetching attendance records",
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
 module.exports = router;
