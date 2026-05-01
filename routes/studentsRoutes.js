@@ -448,6 +448,7 @@ router.put("/payStudentFee/:feeId", authMiddleWare, async (req, res) => {
 });
 router.get("/getStudentFee/:studentId", authMiddleWare, async (req, res) => {
   const { studentId } = req.params;
+  const { month } = req.query;
 
   try {
     const registration = await Registration.findOne({ student: studentId });
@@ -459,9 +460,16 @@ router.get("/getStudentFee/:studentId", authMiddleWare, async (req, res) => {
       });
     }
 
-    const fees = await StudentFee.find({
+    let query = {
       registration: registration._id,
-    }).sort({ createdAt: -1 });
+    };
+
+    // If month parameter is provided, filter by month
+    if (month) {
+      query.month = month;
+    }
+
+    const fees = await StudentFee.find(query).sort({ createdAt: -1 });
 
     res.status(200).json({
       message: "Student fee records fetched successfully",
