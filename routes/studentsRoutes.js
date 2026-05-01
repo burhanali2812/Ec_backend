@@ -419,9 +419,9 @@ router.put("/payStudentFee/:feeId", authMiddleWare, async (req, res) => {
   const { amountPaid } = req.body;
   const { feeId } = req.params;
 
-  if (!feeId) {
+  if (!feeId || amountPaid === undefined) {
     return res.status(400).json({
-      message: "feeId is required",
+      message: "feeId and amountPaid are required",
       success: false,
     });
   }
@@ -436,12 +436,18 @@ router.put("/payStudentFee/:feeId", authMiddleWare, async (req, res) => {
       });
     }
 
-    studentFee.amountPaid += amountPaid;
+    const paid = Number(amountPaid);
+
+    studentFee.amountPaid += paid;
+
+    if (studentFee.amountPaid > studentFee.finalFee) {
+      studentFee.amountPaid = studentFee.finalFee;
+    }
+
     studentFee.remainingFee = studentFee.finalFee - studentFee.amountPaid;
 
-    if (studentFee.remainingFee <= 0) {
+    if (studentFee.remainingFee === 0) {
       studentFee.status = "paid";
-      studentFee.remainingFee = 0;
       studentFee.paidAt = new Date();
     } else {
       studentFee.status = "partial";
@@ -456,7 +462,7 @@ router.put("/payStudentFee/:feeId", authMiddleWare, async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({
-      message: "Error occurred while updating payment",
+      message: error.message,
       success: false,
     });
   }
