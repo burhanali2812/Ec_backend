@@ -447,9 +447,19 @@ router.put("/payStudentFee/:feeId", authMiddleWare, async (req, res) => {
     studentFee.remainingFee = studentFee.finalFee - studentFee.amountPaid;
 
     if (studentFee.remainingFee === 0) {
+      studentFee.amountPaid = studentFee.finalFee;
+      studentFee.remainingFee = 0;
       studentFee.status = "paid";
       studentFee.paidAt = new Date();
-    } else {
+    } 
+    else if (studentFee.remainingFee === studentFee.finalFee) {
+      studentFee.amountPaid = 0;
+      studentFee.remainingFee = studentFee.finalFee;
+      studentFee.status = "unpaid";
+    }
+    else {
+      studentFee.amountPaid = studentFee.finalFee - studentFee.remainingFee;
+      studentFee.remainingFee = studentFee.finalFee - studentFee.amountPaid;
       studentFee.status = "partial";
     }
 
