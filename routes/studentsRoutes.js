@@ -419,9 +419,9 @@ router.put("/payStudentFee/:feeId", authMiddleWare, async (req, res) => {
   const { amountPaid } = req.body;
   const { feeId } = req.params;
 
-  if (!feeId || !amountPaid) {
+  if (!feeId) {
     return res.status(400).json({
-      message: "feeId and amountPaid are required",
+      message: "feeId is required",
       success: false,
     });
   }
