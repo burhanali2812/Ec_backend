@@ -273,7 +273,7 @@ router.post("/studentFee", authMiddleWare, async (req, res) => {
     const registration = await Registration.findById(registrationId);
 
     const currentDate = new Date();
-    // Use createdAt if available, otherwise use current date
+    // Use registration createdAt if available, otherwise use current date
     let registrationDate = registration.createdAt
       ? new Date(registration.createdAt)
       : currentDate;
@@ -294,11 +294,17 @@ router.post("/studentFee", authMiddleWare, async (req, res) => {
       regYear,
     );
 
-    // Format month as "YYYY-MM" for database consistency - use REGISTRATION month, not current month
-    const monthString = String(regMonth + 1).padStart(2, "0");
-    const monthKey = `${regYear}-${monthString}`;
+    // Get current month for fee generation (not registration month)
+    let currentMonth = currentDate.getMonth();
+    let currentYear = currentDate.getFullYear();
 
-    // Delete existing fee for this month to allow recalculation when courses change
+    // Format month as "YYYY-MM" for database consistency - use CURRENT month, not registration month
+    const monthString = String(currentMonth + 1).padStart(2, "0");
+    const monthKey = `${currentYear}-${monthString}`;
+
+    console.log("Generating fee for current month:", monthKey);
+
+    // Delete existing fee for current month to allow recalculation when courses change
     await StudentFee.deleteOne({
       registration: registration._id,
       month: monthKey,
@@ -325,16 +331,25 @@ router.post("/studentFee", authMiddleWare, async (req, res) => {
     let proratedFromDate = null;
     let proratedToDate = null;
 
-    // Check if registration is after 10th of any month - apply proration for that month
+    // Check if registration is after 10th AND we're in the registration month - apply proration ONLY for registration month
+    const isRegistrationMonth =
+      regMonth === currentMonth && regYear === currentYear;
+
     console.log(
-      "Proration Check: regDayOfMonth(",
+      "Proration Check: Is registration month?",
+      isRegistrationMonth,
+      "regDayOfMonth(",
       regDayOfMonth,
       ") > 10?",
       regDayOfMonth > 10,
     );
 
-    if (regDayOfMonth > 10) {
-      console.log("✓ PRORATION TRIGGERED - Day", regDayOfMonth);
+    if (isRegistrationMonth && regDayOfMonth > 10) {
+      console.log(
+        "✓ PRORATION TRIGGERED - Day",
+        regDayOfMonth,
+        "in registration month",
+      );
       // Prorated fee: from registration date to last day of that month
       const lastDayOfMonth = new Date(regYear, regMonth + 1, 0).getDate();
       const daysRemaining = lastDayOfMonth - regDayOfMonth + 1;
@@ -361,7 +376,7 @@ router.post("/studentFee", authMiddleWare, async (req, res) => {
       proratedFromDate = registrationDate;
       proratedToDate = new Date(regYear, regMonth + 1, 0); // Last day of month
     } else {
-      console.log("✗ NO PRORATION - Day", regDayOfMonth, "is <= 10");
+      console.log("✗ NO PRORATION - Full month fee");
     }
 
     // Calculate due date: 5 days after voucher generation date
