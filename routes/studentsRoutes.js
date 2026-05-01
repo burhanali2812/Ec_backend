@@ -448,7 +448,7 @@ router.put("/payStudentFee/:feeId", authMiddleWare, async (req, res) => {
 });
 router.get("/getStudentFee/:studentId", authMiddleWare, async (req, res) => {
   const { studentId } = req.params;
-  const { month } = req.query;
+  let { month } = req.query;
 
   try {
     const registration = await Registration.findOne({ student: studentId });
@@ -460,14 +460,18 @@ router.get("/getStudentFee/:studentId", authMiddleWare, async (req, res) => {
       });
     }
 
+    // If month parameter is not provided, use current month
+    if (!month) {
+      const now = new Date();
+      const year = now.getFullYear();
+      const monthNum = String(now.getMonth() + 1).padStart(2, "0");
+      month = `${year}-${monthNum}`;
+    }
+
     let query = {
       registration: registration._id,
+      month: month,
     };
-
-    // If month parameter is provided, filter by month
-    if (month) {
-      query.month = month;
-    }
 
     const fees = await StudentFee.find(query).sort({ createdAt: -1 });
 
