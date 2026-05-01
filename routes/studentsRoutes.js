@@ -463,7 +463,7 @@ router.put("/payStudentFee/:feeId", authMiddleWare, async (req, res) => {
 });
 router.get("/getStudentFee/:studentId", authMiddleWare, async (req, res) => {
   const { studentId } = req.params;
-  let { month } = req.query;
+  let { month, feeFetchType } = req.query;
 
   try {
     const registration = await Registration.findOne({ student: studentId });
@@ -487,6 +487,9 @@ router.get("/getStudentFee/:studentId", authMiddleWare, async (req, res) => {
       registration: registration._id,
       month: month,
     };
+    if (feeFetchType === "all") {
+      delete query.month; // Remove month filter to fetch all fees for the student
+    }
 
     const fees = await StudentFee.find(query).sort({ createdAt: -1 });
 
