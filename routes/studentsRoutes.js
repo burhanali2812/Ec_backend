@@ -438,35 +438,46 @@ router.put("/payStudentFee/:feeId", authMiddleWare, async (req, res) => {
 
     const paid = Number(amountPaid);
 
+    // ❌ invalid input
+    if (isNaN(paid) || paid < 0) {
+      return res.status(400).json({
+        message: "Invalid payment amount",
+        success: false,
+      });
+    }
 
-// prevent invalid input
-if (isNaN(paid) || paid < 0) {
-  return res.status(400).json({
-    message: "Invalid payment amount",
-    success: false,
-  });
-}
+    //  SPECIAL CASE: RESET TO UNPAID
+    if (paid === 0) {
+      studentFee.amountPaid = 0;
+      studentFee.remainingFee = studentFee.finalFee;
+      studentFee.status = "unpaid";
+      studentFee.paidAt = null;
 
-// update payment
-studentFee.amountPaid += paid;
+      await studentFee.save();
 
-// cap to finalFee
-if (studentFee.amountPaid > studentFee.finalFee) {
-  studentFee.amountPaid = studentFee.finalFee;
-}
+      return res.status(200).json({
+        message: "Fee reset to unpaid",
+        success: true,
+        studentFee,
+      });
+    }
 
-// always calculate remaining
-studentFee.remainingFee = studentFee.finalFee - studentFee.amountPaid;
+    // ✅ NORMAL PAYMENT FLOW
+    studentFee.amountPaid += paid;
 
-// ✅ SINGLE SOURCE OF TRUTH (status only depends on remainingFee)
-if (studentFee.amountPaid === 0) {
-  studentFee.status = "unpaid";
-} else if (studentFee.remainingFee === 0) {
-  studentFee.status = "paid";
-  studentFee.paidAt = new Date();
-} else {
-  studentFee.status = "partial";
-}
+    // cap to finalFee
+    if (studentFee.amountPaid > studentFee.finalFee) {
+      studentFee.amountPaid = studentFee.finalFee;
+    }
+
+    studentFee.remainingFee = studentFee.finalFee - studentFee.amountPaid;
+
+    if (studentFee.remainingFee === 0) {
+      studentFee.status = "paid";
+      studentFee.paidAt = new Date();
+    } else {
+      studentFee.status = "partial";
+    }
 
     await studentFee.save();
 
@@ -475,6 +486,7 @@ if (studentFee.amountPaid === 0) {
       success: true,
       studentFee,
     });
+
   } catch (error) {
     res.status(500).json({
       message: error.message,
