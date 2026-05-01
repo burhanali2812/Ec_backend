@@ -438,30 +438,35 @@ router.put("/payStudentFee/:feeId", authMiddleWare, async (req, res) => {
 
     const paid = Number(amountPaid);
 
-    studentFee.amountPaid += paid;
 
-    if (studentFee.amountPaid > studentFee.finalFee) {
-      studentFee.amountPaid = studentFee.finalFee;
-    }
+// prevent invalid input
+if (isNaN(paid) || paid < 0) {
+  return res.status(400).json({
+    message: "Invalid payment amount",
+    success: false,
+  });
+}
 
-    studentFee.remainingFee = studentFee.finalFee - studentFee.amountPaid;
+// update payment
+studentFee.amountPaid += paid;
 
-    if (studentFee.remainingFee === 0) {
-      studentFee.amountPaid = studentFee.finalFee;
-      studentFee.remainingFee = 0;
-      studentFee.status = "paid";
-      studentFee.paidAt = new Date();
-    } 
-    else if (studentFee.remainingFee === studentFee.finalFee) {
-      studentFee.amountPaid = 0;
-      studentFee.remainingFee = studentFee.finalFee;
-      studentFee.status = "unpaid";
-    }
-    else {
-      studentFee.amountPaid = studentFee.finalFee - studentFee.remainingFee;
-      studentFee.remainingFee = studentFee.finalFee - studentFee.amountPaid;
-      studentFee.status = "partial";
-    }
+// cap to finalFee
+if (studentFee.amountPaid > studentFee.finalFee) {
+  studentFee.amountPaid = studentFee.finalFee;
+}
+
+// always calculate remaining
+studentFee.remainingFee = studentFee.finalFee - studentFee.amountPaid;
+
+// ✅ SINGLE SOURCE OF TRUTH (status only depends on remainingFee)
+if (studentFee.amountPaid === 0) {
+  studentFee.status = "unpaid";
+} else if (studentFee.remainingFee === 0) {
+  studentFee.status = "paid";
+  studentFee.paidAt = new Date();
+} else {
+  studentFee.status = "partial";
+}
 
     await studentFee.save();
 
