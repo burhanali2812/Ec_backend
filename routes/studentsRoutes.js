@@ -474,6 +474,7 @@ router.get("/getStudentFee/:studentId", authMiddleWare, async (req, res) => {
         success: false,
       });
     }
+    console.log(`Fetching fees for student ${studentId} with feeFetchType: ${feeFetchType} and month: ${month}`);
 
     // If month parameter is not provided, use current month
     if (!month) {
