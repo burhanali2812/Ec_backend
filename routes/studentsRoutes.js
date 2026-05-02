@@ -612,7 +612,7 @@ router.patch("/resetPassword", authMiddleWare, async (req, res) => {
     res.status(500).json({ message: error.message, success: false });
   }
 });
-router.post("/setSecurityQuestion", authMiddleWare, async (req, res) => {
+router.post("/setSecurityQuestion", async (req, res) => {
   const { securityQuestion, securityAnswer } = req.body;
   if (!securityQuestion || !securityAnswer) {
     return res.status(400).json({
