@@ -613,10 +613,10 @@ router.patch("/resetPassword", authMiddleWare, async (req, res) => {
   }
 });
 router.post("/setSecurityQuestion", authMiddleWare, async (req, res) => {
-  const {securityAnswer } = req.body;
-  if (!securityAnswer) {
+  const { securityQuestion, securityAnswer } = req.body;
+  if (!securityQuestion || !securityAnswer) {
     return res.status(400).json({
-      message: "Security question  answer is required",
+      message: "Security question and answer are required",
       success: false,
     });
   }
@@ -625,7 +625,7 @@ router.post("/setSecurityQuestion", authMiddleWare, async (req, res) => {
       return res.status(404).json({ message: "Student not found", success: false });
     }
     const hashedAnswer = await bcrypt.hash(securityAnswer, 10);
-    student.securityQuestion = "What is your first mobile model ?"; 
+    student.securityQuestion = securityQuestion;
     student.securityAnswer = hashedAnswer;
     student.isSecuritySet = true;
     await student.save();
@@ -682,7 +682,7 @@ router.post("/auth/verify-email-for-reset", async (req, res) => {
   } 
   try {   const student = await Student.findOne({ email });
     if (!student) {
-      return res.status(404).json({ message: "Student not found", success: false });
+      return res.status(404).json({ message: "Student not found on this email", success: false });
     }
     res.status(200).json({
       message: "Email verified successfully",
