@@ -691,6 +691,7 @@ router.post("/auth/verify-email-for-reset", async (req, res) => {
         _id: student._id,
         email: student.email,
         isSecuritySet: student.isSecuritySet,
+        securityQuestion: student.securityQuestion,
         name: student.name,
       },
     });

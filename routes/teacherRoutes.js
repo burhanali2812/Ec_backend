@@ -353,6 +353,7 @@ router.post("/auth/verify-email-for-reset", async (req, res) => {
         _id: teacher._id,
         email: teacher.email,
         isSecuritySet: teacher.isSecuritySet,
+        securityQuestion: teacher.securityQuestion,
         name: teacher.name,
       },
     });
