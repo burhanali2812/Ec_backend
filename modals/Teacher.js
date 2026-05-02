@@ -11,6 +11,22 @@ const teacherSchema = new mongoose.Schema({
   courses: [{ type: mongoose.Schema.Types.ObjectId, ref: "Course" }],
   profileImage: { type: String, default: null },
   salary: { type: Number, required: true },
+    isPasswordChanged: {
+  type: Boolean,
+  default: false
+},
+securityQuestion: {
+  type: String,
+  default: ""
+},
+securityAnswer: {
+  type: String,
+  default: ""
+},
+isSecuritySet: {
+  type: Boolean,
+  default: false
+},
   createdAt: { type: Date, default: Date.now },
 
 });

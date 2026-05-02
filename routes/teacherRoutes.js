@@ -234,4 +234,167 @@ router.get("/totalStudents", authMiddleWare, async (req, res) => {
   }
 });
 
+
+router.post("/resetPassword", async (req, res) => {
+  const {email, currentPassword, newPassword } = req.body;
+  if (!email || !currentPassword || !newPassword) {
+    return res
+      .status(400)
+      .json({ message: "Email, current, and new password are required", success: false });
+  }
+
+  try {
+    const teacher = await Teacher.findOne({ email });
+    if (!teacher) {
+      return res.status(404).json({ message: "Teacher not found", success: false });
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, teacher.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Current password is incorrect", success: false });
+    }
+    if(newPassword.length < 6){
+      return res.status(400).json({ message: "New password must be at least 6 characters long", success: false });
+    }
+    if (currentPassword === newPassword) {
+      return res.status(400).json({ message: "New password cannot be the same as current password", success: false });
+    }
+    if (!/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+      return res.status(400).json({ message: "New password must contain at least one uppercase letter, one lowercase letter, and one number", success: false });
+    }
+    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+
+
+    teacher.password = hashedNewPassword;
+    teacher.isPasswordChanged = true;
+    await teacher.save();
+
+    res.status(200).json({ message: "Password reset successfully", success: true });
+  } catch (error) {
+    res.status(500).json({ message: error.message, success: false });
+  }
+});
+router.post("/setSecurityQuestion", async (req, res) => {
+  const {email, securityQuestion, securityAnswer } = req.body;
+  if (!email || !securityQuestion || !securityAnswer) {
+    return res.status(400).json({
+      message: "Email, security question, and answer are required",
+      success: false,
+    });
+  }
+  try {    const teacher = await Teacher.findOne({ email });
+    if (!teacher) {
+      return res.status(404).json({ message: "Teacher not found", success: false });
+    }
+    const hashedAnswer = await bcrypt.hash(securityAnswer, 10);
+    teacher.securityQuestion = securityQuestion;
+    teacher.securityAnswer = hashedAnswer;
+    teacher.isSecuritySet = true;
+    await teacher.save();
+    res.status(200).json({
+      message: "Security question set successfully",
+      success: true,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message, success: false });
+  }
+});
+
+router.post("/verifySecurityAnswer", async (req, res) => {
+  const { email, securityAnswer } = req.body;
+  if (!email || !securityAnswer) {
+    return res.status(400).json({
+      message: "Email and security answer are required",
+      success: false,
+    });
+  }
+  try {    const teacher = await Teacher.findOne({ email });
+    if (!teacher) {
+      return res.status(404).json({ message: "Teacher not found", success: false });
+    }
+    if (!teacher.isSecuritySet) {
+      return res.status(400).json({
+        message: "Security question not set for this account",
+        success: false,
+      });
+    }
+    const isMatch = await bcrypt.compare(securityAnswer, teacher.securityAnswer);
+    if (!isMatch) {
+      return res.status(400).json({ 
+        message: "Security answer is incorrect",
+        success: false,
+       });
+    }
+    res.status(200).json({
+      message: "Security answer verified successfully",
+      success: true,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message, success: false });
+  }
+
+});
+router.post("/auth/verify-email-for-reset", async (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({
+      message: "Email is required",
+      success: false,
+    });
+  } 
+  try {   const teacher = await Teacher.findOne({ email });
+    if (!teacher) {
+      return res.status(404).json({ message: "Teacher not found on this email", success: false });
+    }
+    res.status(200).json({
+      message: "Email verified successfully",
+      success: true,
+      user: {
+        _id: teacher._id,
+        email: teacher.email,
+        isSecuritySet: teacher.isSecuritySet,
+        name: teacher.name,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message, success: false });
+  }
+});
+
+
+
+router.get("/migrate-teachers-fields", async (req, res) => {
+  try {
+    const result = await Teacher.updateMany(
+      {
+        $or: [
+          { isPasswordChanged: { $exists: false } },
+          { securityQuestion: { $exists: false } },
+          { securityAnswer: { $exists: false } },
+          { isSecuritySet: { $exists: false } }
+        ]
+      },
+      {
+        $set: {
+          isPasswordChanged: false,
+          securityQuestion: "",
+          securityAnswer: "",
+          isSecuritySet: false
+        }
+      }
+    );
+
+    res.json({
+      message: "Migration completed successfully",
+      matched: result.matchedCount,
+      modified: result.modifiedCount
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+
 module.exports = router;
