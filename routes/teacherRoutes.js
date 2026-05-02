@@ -363,37 +363,37 @@ router.post("/auth/verify-email-for-reset", async (req, res) => {
 
 
 
-router.get("/migrate-teachers-fields", async (req, res) => {
-  try {
-    const result = await Teacher.updateMany(
-      {
-        $or: [
-          { isPasswordChanged: { $exists: false } },
-          { securityQuestion: { $exists: false } },
-          { securityAnswer: { $exists: false } },
-          { isSecuritySet: { $exists: false } }
-        ]
-      },
-      {
-        $set: {
-          isPasswordChanged: false,
-          securityQuestion: "",
-          securityAnswer: "",
-          isSecuritySet: false
-        }
-      }
-    );
+// router.get("/migrate-teachers-fields", async (req, res) => {
+//   try {
+//     const result = await Teacher.updateMany(
+//       {
+//         $or: [
+//           { isPasswordChanged: { $exists: false } },
+//           { securityQuestion: { $exists: false } },
+//           { securityAnswer: { $exists: false } },
+//           { isSecuritySet: { $exists: false } }
+//         ]
+//       },
+//       {
+//         $set: {
+//           isPasswordChanged: false,
+//           securityQuestion: "",
+//           securityAnswer: "",
+//           isSecuritySet: false
+//         }
+//       }
+//     );
 
-    res.json({
-      message: "Migration completed successfully",
-      matched: result.matchedCount,
-      modified: result.modifiedCount
-    });
+//     res.json({
+//       message: "Migration completed successfully",
+//       matched: result.matchedCount,
+//       modified: result.modifiedCount
+//     });
 
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// });
 
 
 
