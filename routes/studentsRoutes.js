@@ -587,7 +587,7 @@ router.post("/resetPassword", async (req, res) => {
       return res.status(404).json({ message: "Student not found", success: false });
     }
 
-    const isMatch = await student.comparePassword(currentPassword);
+    const isMatch = await bcrypt.compare(currentPassword, student.password);
     if (!isMatch) {
       return res.status(400).json({ message: "Current password is incorrect", success: false });
     }
