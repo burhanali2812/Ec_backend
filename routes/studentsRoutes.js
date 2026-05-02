@@ -573,38 +573,69 @@ router.get(
 );
 
 
-router.get("/migrate-students-fields", async (req, res) => {
+router.patch("/resetPassword", authMiddleWare, async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) {
+    return res
+      .status(400)
+      .json({ message: "Current and new password are required", success: false });
+  }
+
   try {
-    const result = await Student.updateMany(
-      {
-        $or: [
-          { isPasswordChanged: { $exists: false } },
-          { securityQuestion: { $exists: false } },
-          { securityAnswer: { $exists: false } },
-          { isSecuritySet: { $exists: false } }
-        ]
-      },
-      {
-        $set: {
-          isPasswordChanged: false,
-          securityQuestion: null,
-          securityAnswer: null,
-          isSecuritySet: false
-        }
-      }
-    );
+    const student = await Student.findById(req.user.id);
+    if (!student) {
+      return res.status(404).json({ message: "Student not found", success: false });
+    }
 
-    res.json({
-      message: "Migration completed successfully",
-      matched: result.matchedCount,
-      modified: result.modifiedCount
-    });
+    const isMatch = await student.comparePassword(currentPassword);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Current password is incorrect", success: false });
+    }
+    if(newPassword.length < 6){
+      return res.status(400).json({ message: "New password must be at least 6 characters long", success: false });
+    }
+    if (currentPassword === newPassword) {
+      return res.status(400).json({ message: "New password cannot be the same as current password", success: false });
+    }
+    if (!/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+      return res.status(400).json({ message: "New password must contain at least one uppercase letter, one lowercase letter, and one number", success: false });
+    }
+    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
 
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+
+    student.password = hashedNewPassword;
+    student.isPasswordChanged = true;
+    await student.save();
+
+    res.status(200).json({ message: "Password reset successfully", success: true });
+  } catch (error) {
+    res.status(500).json({ message: error.message, success: false });
   }
 });
-
-
+router.post("/setSecurityQuestion", authMiddleWare, async (req, res) => {
+  const {securityAnswer } = req.body;
+  if (!securityAnswer) {
+    return res.status(400).json({
+      message: "Security question  answer is required",
+      success: false,
+    });
+  }
+  try {    const student = await Student.findById(req.user.id);
+    if (!student) {
+      return res.status(404).json({ message: "Student not found", success: false });
+    }
+    const hashedAnswer = await bcrypt.hash(securityAnswer, 10);
+    student.securityQuestion = "What is your first mobile model ?"; 
+    student.securityAnswer = hashedAnswer;
+    student.isSecuritySet = true;
+    await student.save();
+    res.status(200).json({
+      message: "Security question set successfully",
+      success: true,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message, success: false });
+  }
+});
 
 module.exports = router;
