@@ -13,6 +13,22 @@ const studentSchema = new mongoose.Schema({
   fatherName: { type: String, required: true },
   fatherContact: { type: String },
   password: { type: String, required: true },
+  isPasswordChanged: {
+  type: Boolean,
+  default: false
+},
+securityQuestion: {
+  type: String,
+  default: ""
+},
+securityAnswer: {
+  type: String,
+  default: ""
+},
+isSecuritySet: {
+  type: Boolean,
+  default: false
+},
   createdAt: { type: Date, default: Date.now }
 });
 
