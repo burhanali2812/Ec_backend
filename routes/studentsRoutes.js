@@ -638,4 +638,65 @@ router.post("/setSecurityQuestion", authMiddleWare, async (req, res) => {
   }
 });
 
+router.post("/verifySecurityAnswer", async (req, res) => {
+  const { email, securityAnswer } = req.body;
+  if (!email || !securityAnswer) {
+    return res.status(400).json({
+      message: "Email and security answer are required",
+      success: false,
+    });
+  }
+  try {    const student = await Student.findOne({ email });
+    if (!student) {
+      return res.status(404).json({ message: "Student not found", success: false });
+    }
+    if (!student.isSecuritySet) {
+      return res.status(400).json({
+        message: "Security question not set for this account",
+        success: false,
+      });
+    }
+    const isMatch = await bcrypt.compare(securityAnswer, student.securityAnswer);
+    if (!isMatch) {
+      return res.status(400).json({ 
+        message: "Security answer is incorrect",
+        success: false,
+       });
+    }
+    res.status(200).json({
+      message: "Security answer verified successfully",
+      success: true,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message, success: false });
+  }
+
+});
+router.post("/auth/verify-email-for-reset", async (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({
+      message: "Email is required",
+      success: false,
+    });
+  } 
+  try {   const student = await Student.findOne({ email });
+    if (!student) {
+      return res.status(404).json({ message: "Student not found", success: false });
+    }
+    res.status(200).json({
+      message: "Email verified successfully",
+      success: true,
+      user: {
+        _id: student._id,
+        email: student.email,
+        isSecuritySet: student.isSecuritySet,
+        name: student.name,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message, success: false });
+  }
+});
+
 module.exports = router;
