@@ -613,14 +613,14 @@ router.patch("/resetPassword", authMiddleWare, async (req, res) => {
   }
 });
 router.post("/setSecurityQuestion", async (req, res) => {
-  const { securityQuestion, securityAnswer } = req.body;
-  if (!securityQuestion || !securityAnswer) {
+  const {email, securityQuestion, securityAnswer } = req.body;
+  if (!email || !securityQuestion || !securityAnswer) {
     return res.status(400).json({
-      message: "Security question and answer are required",
+      message: "Email, security question, and answer are required",
       success: false,
     });
   }
-  try {    const student = await Student.findById(req.user.id);
+  try {    const student = await Student.findOne({ email });
     if (!student) {
       return res.status(404).json({ message: "Student not found", success: false });
     }
