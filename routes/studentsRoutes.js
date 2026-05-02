@@ -573,16 +573,16 @@ router.get(
 );
 
 
-router.patch("/resetPassword", authMiddleWare, async (req, res) => {
-  const { currentPassword, newPassword } = req.body;
-  if (!currentPassword || !newPassword) {
+router.post("/resetPassword", async (req, res) => {
+  const {email, currentPassword, newPassword } = req.body;
+  if (!email || !currentPassword || !newPassword) {
     return res
       .status(400)
-      .json({ message: "Current and new password are required", success: false });
+      .json({ message: "Email, current, and new password are required", success: false });
   }
 
   try {
-    const student = await Student.findById(req.user.id);
+    const student = await Student.findOne({ email });
     if (!student) {
       return res.status(404).json({ message: "Student not found", success: false });
     }
