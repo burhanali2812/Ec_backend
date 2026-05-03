@@ -30,6 +30,9 @@ const isAdmin = (req, res) => {
 
 const normalizeId = (value) => String(value || "").trim();
 
+// Courses that can be scheduled at the same time on the same slot
+const CONCURRENT_COURSES = ["Computer", "Biology"];
+
 const buildConflictQuery = ({
   id,
   classInfo,
@@ -37,6 +40,7 @@ const buildConflictQuery = ({
   dayOfWeek,
   startTime,
   endTime,
+  courseTitle,
 }) => ({
   ...(id ? { _id: { $ne: id } } : {}),
   dayOfWeek,
@@ -44,7 +48,10 @@ const buildConflictQuery = ({
   endTime: { $gt: startTime },
   $or: [
     { teacher }, // teacher busy
-    { classInfo }, // class busy (IMPORTANT FIX)
+    // Allow Computer and Biology courses to overlap
+    ...(courseTitle && CONCURRENT_COURSES.includes(courseTitle)
+      ? []
+      : [{ classInfo }]), // class busy (skip for concurrent courses)
   ],
 });
 
@@ -149,6 +156,7 @@ router.post("/addTimeTableEntry", authMiddleWare, async (req, res) => {
         dayOfWeek,
         startTime,
         endTime,
+        courseTitle: pairCheck.course.title,
       }),
     );
 
@@ -248,6 +256,7 @@ router.put("/updateTimeTableEntry/:id", authMiddleWare, async (req, res) => {
         dayOfWeek,
         startTime,
         endTime,
+        courseTitle: pairCheck.course.title,
       }),
     );
 
