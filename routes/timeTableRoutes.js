@@ -32,7 +32,6 @@ const normalizeId = (value) => String(value || "").trim();
 
 const buildConflictQuery = ({
   id,
-  course,
   classInfo,
   teacher,
   dayOfWeek,
@@ -43,7 +42,10 @@ const buildConflictQuery = ({
   dayOfWeek,
   startTime: { $lt: endTime },
   endTime: { $gt: startTime },
-  $or: [{ teacher }, { course, classInfo }],
+  $or: [
+    { teacher },     // teacher busy
+    { classInfo },   // class busy (IMPORTANT FIX)
+  ],
 });
 
 const verifyCourseTeacherPair = async (courseId, teacherId, classInfo) => {
@@ -142,7 +144,7 @@ router.post("/addTimeTableEntry", authMiddleWare, async (req, res) => {
 
     const conflict = await TimeTable.findOne(
       buildConflictQuery({
-        course,
+
         classInfo,
         teacher,
         dayOfWeek,
@@ -241,7 +243,6 @@ router.put("/updateTimeTableEntry/:id", authMiddleWare, async (req, res) => {
     const conflict = await TimeTable.findOne(
       buildConflictQuery({
         id,
-        course,
         classInfo,
         teacher,
         dayOfWeek,
