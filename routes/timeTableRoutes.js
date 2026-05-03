@@ -43,8 +43,8 @@ const buildConflictQuery = ({
   startTime: { $lt: endTime },
   endTime: { $gt: startTime },
   $or: [
-    { teacher },     // teacher busy
-    { classInfo },   // class busy (IMPORTANT FIX)
+    { teacher }, // teacher busy
+    { classInfo }, // class busy (IMPORTANT FIX)
   ],
 });
 
@@ -144,7 +144,6 @@ router.post("/addTimeTableEntry", authMiddleWare, async (req, res) => {
 
     const conflict = await TimeTable.findOne(
       buildConflictQuery({
-
         classInfo,
         teacher,
         dayOfWeek,
@@ -243,6 +242,7 @@ router.put("/updateTimeTableEntry/:id", authMiddleWare, async (req, res) => {
     const conflict = await TimeTable.findOne(
       buildConflictQuery({
         id,
+        course,
         classInfo,
         teacher,
         dayOfWeek,
@@ -309,42 +309,54 @@ router.delete("/deleteTimeTableEntry/:id", authMiddleWare, async (req, res) => {
 
 router.get("/viewTimeTable", authMiddleWare, async (req, res) => {
   try {
-    if (!req.user || req.user.role !== "student") {
+    if (!req.user || !["student", "teacher"].includes(req.user.role)) {
       return res.status(403).json({
         success: false,
-        message: "Only students can view timetable",
+        message: "Only students and teachers can view timetable",
       });
     }
 
-    const studentId = req.user.id;
+    let entries = [];
 
-    const student = await Student.findById(studentId).select("classInfo");
-    if (!student || !student.classInfo) {
-      return res.status(404).json({
-        success: false,
-        message: "Student profile/class not found",
-      });
+    if (req.user.role === "student") {
+      const studentId = req.user.id;
+
+      const student = await Student.findById(studentId).select("classInfo");
+      if (!student || !student.classInfo) {
+        return res.status(404).json({
+          success: false,
+          message: "Student profile/class not found",
+        });
+      }
+
+      const registration = await Registration.findOne({ student: studentId });
+
+      if (!registration || !registration.aboutCourse.length) {
+        return res.json({
+          success: true,
+          timeTables: [],
+        });
+      }
+
+      const courseIds = registration.aboutCourse.map((item) => item.course);
+
+      entries = await TimeTable.find({
+        course: { $in: courseIds },
+        classInfo: student.classInfo,
+        dayOfWeek: { $ne: "Sunday" },
+      })
+        .populate("course", "title")
+        .populate("teacher", "name")
+        .lean();
+    } else {
+      entries = await TimeTable.find({
+        teacher: req.user.id,
+        dayOfWeek: { $ne: "Sunday" },
+      })
+        .populate("course", "title")
+        .populate("teacher", "name")
+        .lean();
     }
-
-    const registration = await Registration.findOne({ student: studentId });
-
-    if (!registration || !registration.aboutCourse.length) {
-      return res.json({
-        success: true,
-        timeTables: [],
-      });
-    }
-
-    const courseIds = registration.aboutCourse.map((item) => item.course);
-
-    const entries = await TimeTable.find({
-      course: { $in: courseIds },
-      classInfo: student.classInfo,
-      dayOfWeek: { $ne: "Sunday" },
-    })
-      .populate("course", "title")
-      .populate("teacher", "name")
-      .lean();
 
     const DAY_ORDER = {
       Monday: 1,
