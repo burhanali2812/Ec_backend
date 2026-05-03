@@ -12,6 +12,10 @@ const timeTableSchema = new mongoose.Schema(
       ref: "Teacher",
       required: true,
     },
+    classInfo: { type: String,
+      enum: ["Pre-9th", "9th", "10th", "11th", "12th"],
+      required: true },
+      
     dayOfWeek: {
       type: String,
       enum: [
