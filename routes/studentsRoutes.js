@@ -572,57 +572,87 @@ router.get(
   },
 );
 
-
 router.post("/resetPassword", async (req, res) => {
-  const {email, currentPassword, newPassword } = req.body;
+  const { email, currentPassword, newPassword } = req.body;
   if (!email || !currentPassword || !newPassword) {
     return res
       .status(400)
-      .json({ message: "Email, current, and new password are required", success: false });
+      .json({
+        message: "Email, current, and new password are required",
+        success: false,
+      });
   }
 
   try {
     const student = await Student.findOne({ email });
     if (!student) {
-      return res.status(404).json({ message: "Student not found", success: false });
+      return res
+        .status(404)
+        .json({ message: "Student not found", success: false });
     }
 
     const isMatch = await bcrypt.compare(currentPassword, student.password);
     if (!isMatch) {
-      return res.status(400).json({ message: "Current password is incorrect", success: false });
+      return res
+        .status(400)
+        .json({ message: "Current password is incorrect", success: false });
     }
-    if(newPassword.length < 6){
-      return res.status(400).json({ message: "New password must be at least 6 characters long", success: false });
+    if (newPassword.length < 6) {
+      return res
+        .status(400)
+        .json({
+          message: "New password must be at least 6 characters long",
+          success: false,
+        });
     }
     if (currentPassword === newPassword) {
-      return res.status(400).json({ message: "New password cannot be the same as current password", success: false });
+      return res
+        .status(400)
+        .json({
+          message: "New password cannot be the same as current password",
+          success: false,
+        });
     }
-    if (!/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
-      return res.status(400).json({ message: "New password must contain at least one uppercase letter, one lowercase letter, and one number", success: false });
+    if (
+      !/[A-Z]/.test(newPassword) ||
+      !/[a-z]/.test(newPassword) ||
+      !/[0-9]/.test(newPassword)
+    ) {
+      return res
+        .status(400)
+        .json({
+          message:
+            "New password must contain at least one uppercase letter, one lowercase letter, and one number",
+          success: false,
+        });
     }
     const hashedNewPassword = await bcrypt.hash(newPassword, 10);
-
 
     student.password = hashedNewPassword;
     student.isPasswordChanged = true;
     await student.save();
 
-    res.status(200).json({ message: "Password reset successfully", success: true });
+    res
+      .status(200)
+      .json({ message: "Password reset successfully", success: true });
   } catch (error) {
     res.status(500).json({ message: error.message, success: false });
   }
 });
 router.post("/setSecurityQuestion", async (req, res) => {
-  const {email, securityQuestion, securityAnswer } = req.body;
+  const { email, securityQuestion, securityAnswer } = req.body;
   if (!email || !securityQuestion || !securityAnswer) {
     return res.status(400).json({
       message: "Email, security question, and answer are required",
       success: false,
     });
   }
-  try {    const student = await Student.findOne({ email });
+  try {
+    const student = await Student.findOne({ email });
     if (!student) {
-      return res.status(404).json({ message: "Student not found", success: false });
+      return res
+        .status(404)
+        .json({ message: "Student not found", success: false });
     }
     const hashedAnswer = await bcrypt.hash(securityAnswer, 10);
     student.securityQuestion = securityQuestion;
@@ -646,9 +676,12 @@ router.post("/verifySecurityAnswer", async (req, res) => {
       success: false,
     });
   }
-  try {    const student = await Student.findOne({ email });
+  try {
+    const student = await Student.findOne({ email });
     if (!student) {
-      return res.status(404).json({ message: "Student not found", success: false });
+      return res
+        .status(404)
+        .json({ message: "Student not found", success: false });
     }
     if (!student.isSecuritySet) {
       return res.status(400).json({
@@ -656,12 +689,15 @@ router.post("/verifySecurityAnswer", async (req, res) => {
         success: false,
       });
     }
-    const isMatch = await bcrypt.compare(securityAnswer, student.securityAnswer);
+    const isMatch = await bcrypt.compare(
+      securityAnswer,
+      student.securityAnswer,
+    );
     if (!isMatch) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         message: "Security answer is incorrect",
         success: false,
-       });
+      });
     }
     res.status(200).json({
       message: "Security answer verified successfully",
@@ -670,7 +706,6 @@ router.post("/verifySecurityAnswer", async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message, success: false });
   }
-
 });
 router.post("/auth/verify-email-for-reset", async (req, res) => {
   const { email } = req.body;
@@ -679,10 +714,13 @@ router.post("/auth/verify-email-for-reset", async (req, res) => {
       message: "Email is required",
       success: false,
     });
-  } 
-  try {   const student = await Student.findOne({ email });
+  }
+  try {
+    const student = await Student.findOne({ email });
     if (!student) {
-      return res.status(404).json({ message: "Student not found on this email", success: false });
+      return res
+        .status(404)
+        .json({ message: "Student not found on this email", success: false });
     }
     res.status(200).json({
       message: "Email verified successfully",
@@ -701,48 +739,52 @@ router.post("/auth/verify-email-for-reset", async (req, res) => {
 });
 
 // Get student by roll number
-router.get("/getStudentByRollNumber/:rollNumber", authMiddleWare, async (req, res) => {
-  try {
-    if (req.user.role !== "admin") {
-      return res.status(403).json({
-        message: "Unauthorized, Only admins can fetch student details",
+router.get(
+  "/getStudentByRollNumber/:rollNumber",
+  authMiddleWare,
+  async (req, res) => {
+    try {
+      if (req.user.role !== "admin") {
+        return res.status(403).json({
+          message: "Unauthorized, Only admins can fetch student details",
+          success: false,
+        });
+      }
+
+      const { rollNumber } = req.params;
+
+      if (!rollNumber) {
+        return res.status(400).json({
+          message: "Roll number is required",
+          success: false,
+        });
+      }
+
+      const student = await Student.findOne({ rollNumber }).select(
+        "name email contact rollNumber classInfo _id",
+      );
+
+      if (!student) {
+        return res.status(404).json({
+          message: "Student not found",
+          success: false,
+        });
+      }
+
+      res.status(200).json({
+        message: "Student fetched successfully",
+        success: true,
+        student,
+      });
+    } catch (error) {
+      console.error("Error fetching student:", error);
+      return res.status(500).json({
+        message: "Error fetching student",
         success: false,
+        error: error.message,
       });
     }
-
-    const { rollNumber } = req.params;
-
-    if (!rollNumber) {
-      return res.status(400).json({
-        message: "Roll number is required",
-        success: false,
-      });
-    }
-
-    const student = await Student.findOne({ rollNumber }).select(
-      "name email contact rollNumber classInfo _id",
-    );
-
-    if (!student) {
-      return res.status(404).json({
-        message: "Student not found",
-        success: false,
-      });
-    }
-
-    res.status(200).json({
-      message: "Student fetched successfully",
-      success: true,
-      student,
-    });
-  } catch (error) {
-    console.error("Error fetching student:", error);
-    return res.status(500).json({
-      message: "Error fetching student",
-      success: false,
-      error: error.message,
-    });
-  }
-});
+  },
+);
 
 module.exports = router;

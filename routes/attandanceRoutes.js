@@ -520,86 +520,179 @@ router.get(
 );
 
 // Get student attendance by student ID
-router.get(
-  "/getStudentAttendance",
-  authMiddleWare,
-  async (req, res) => {
-    try {
-      if (req.user.role !== "admin") {
-        return res.status(403).json({
-          message: "Unauthorized, Only admins can fetch student attendance",
-          success: false,
-        });
-      }
-
-      const { studentId, startDate, endDate } = req.query;
-
-      if (!studentId) {
-        return res.status(400).json({
-          message: "studentId is required",
-          success: false,
-        });
-      }
-
-      // Build date filter
-      let dateFilter = {};
-      if (startDate || endDate) {
-        dateFilter.date = {};
-        if (startDate) {
-          dateFilter.date.$gte = new Date(startDate);
-          dateFilter.date.$gte.setHours(0, 0, 0, 0);
-        }
-        if (endDate) {
-          dateFilter.date.$lte = new Date(endDate);
-          dateFilter.date.$lte.setHours(23, 59, 59, 999);
-        }
-      }
-
-      // Get all registrations for this student
-      const registrations = await Registration.find({
-        student: studentId,
-      });
-      const registrationIds = registrations.map((r) => r._id);
-
-      if (registrationIds.length === 0) {
-        return res.status(200).json({
-          message: "No registrations found for this student",
-          success: true,
-          attendance: [],
-        });
-      }
-
-      // Fetch attendance records
-      const attendanceRecords = await Attendance.find({
-        registration: { $in: registrationIds },
-        ...dateFilter,
-      })
-        .populate("course", "title")
-        .populate({
-          path: "registration",
-          select: "student",
-          populate: {
-            path: "student",
-            select: "name rollNumber classInfo email contact",
-          },
-        })
-        .sort({ date: -1 });
-
-      res.status(200).json({
-        message: "Student attendance records fetched successfully",
-        success: true,
-        attendance: attendanceRecords,
-        count: attendanceRecords.length,
-      });
-    } catch (error) {
-      console.error("Error fetching student attendance:", error);
-      return res.status(500).json({
-        message: "Error fetching student attendance records",
+router.get("/getStudentAttendance", authMiddleWare, async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        message: "Unauthorized, Only admins can fetch student attendance",
         success: false,
-        error: error.message,
       });
     }
-  },
-);
+
+    const { studentId, startDate, endDate } = req.query;
+
+    if (!studentId) {
+      return res.status(400).json({
+        message: "studentId is required",
+        success: false,
+      });
+    }
+
+    // Build date filter
+    let dateFilter = {};
+    if (startDate || endDate) {
+      dateFilter.date = {};
+      if (startDate) {
+        dateFilter.date.$gte = new Date(startDate);
+        dateFilter.date.$gte.setHours(0, 0, 0, 0);
+      }
+      if (endDate) {
+        dateFilter.date.$lte = new Date(endDate);
+        dateFilter.date.$lte.setHours(23, 59, 59, 999);
+      }
+    }
+
+    // Get all registrations for this student
+    const registrations = await Registration.find({
+      student: studentId,
+    });
+    const registrationIds = registrations.map((r) => r._id);
+
+    if (registrationIds.length === 0) {
+      return res.status(200).json({
+        message: "No registrations found for this student",
+        success: true,
+        attendance: [],
+      });
+    }
+
+    // Fetch attendance records
+    const attendanceRecords = await Attendance.find({
+      registration: { $in: registrationIds },
+      ...dateFilter,
+    })
+      .populate("course", "title")
+      .populate({
+        path: "registration",
+        select: "student",
+        populate: {
+          path: "student",
+          select: "name rollNumber classInfo email contact",
+        },
+      })
+      .sort({ date: -1 });
+
+    res.status(200).json({
+      message: "Student attendance records fetched successfully",
+      success: true,
+      attendance: attendanceRecords,
+      count: attendanceRecords.length,
+    });
+  } catch (error) {
+    console.error("Error fetching student attendance:", error);
+    return res.status(500).json({
+      message: "Error fetching student attendance records",
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+router.delete("/deleteAttendance/:attendanceId", authMiddleWare, async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        message: "Unauthorized, Only admins can delete attendance records",
+        success: false,
+      });
+    }
+    const { attendanceId } = req.params;
+
+    const deleted = await Attendance.findByIdAndDelete(attendanceId);
+    if (!deleted) {
+      return res.status(404).json({
+        message: "Attendance record not found",
+        success: false,
+      });
+    }
+    return res.status(200).json({
+      message: "Attendance record deleted successfully",
+      success: true,
+    });
+  } catch (error) {
+    console.error("Error deleting attendance record:", error);
+    return res.status(500).json({
+      message: "Error deleting attendance record",
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+router.post("/updateAttendance/:attendanceId", authMiddleWare, async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        message: "Unauthorized, Only admins can update attendance records",
+        success: false,
+      });
+    }
+
+    const { attendanceId } = req.params;
+    const { status, } = req.body;
+    if (!["present", "absent"].includes(status)) {
+      return res.status(400).json({
+        message: "Invalid status value",
+        success: false,
+      });
+    }
+    const attendanceRecord = await Attendance.findById(attendanceId);
+    if (!attendanceRecord) {
+      return res.status(404).json({
+        message: "Attendance record not found",
+        success: false,
+      });
+    }
+
+    const updatedPercentage = await Attendance.countDocuments({
+      registration: attendanceRecord.registration,
+      course: attendanceRecord.course,
+    });
+    const updatedPresent = await Attendance.countDocuments({
+      registration: attendanceRecord.registration,
+      course: attendanceRecord.course,
+      status: "present",
+    });
+    const percentage = updatedPercentage > 0 ? (updatedPresent / updatedPercentage) * 100 : 0;
+    const updated = await Attendance.findByIdAndUpdate(
+      attendanceId,
+      {
+        status,
+        percentage,
+      },
+      { new: true },
+    );
+
+    if (!updated) {
+      return res.status(404).json({
+        message: "Attendance record not found",
+        success: false,
+      });
+    }
+
+    return res.status(200).json({
+      message: "Attendance record updated successfully",
+      success: true,
+      attendance: updated,
+    });
+  } catch (error) {
+    console.error("Error updating attendance record:", error);
+    return res.status(500).json({
+      message: "Error updating attendance record",
+      success: false,
+      error: error.message,
+    });
+  }
+});
 
 module.exports = router;
