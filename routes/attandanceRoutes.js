@@ -519,4 +519,87 @@ router.get(
   },
 );
 
+// Get student attendance by student ID
+router.get(
+  "/getStudentAttendance",
+  authMiddleWare,
+  async (req, res) => {
+    try {
+      if (req.user.role !== "admin") {
+        return res.status(403).json({
+          message: "Unauthorized, Only admins can fetch student attendance",
+          success: false,
+        });
+      }
+
+      const { studentId, startDate, endDate } = req.query;
+
+      if (!studentId) {
+        return res.status(400).json({
+          message: "studentId is required",
+          success: false,
+        });
+      }
+
+      // Build date filter
+      let dateFilter = {};
+      if (startDate || endDate) {
+        dateFilter.date = {};
+        if (startDate) {
+          dateFilter.date.$gte = new Date(startDate);
+          dateFilter.date.$gte.setHours(0, 0, 0, 0);
+        }
+        if (endDate) {
+          dateFilter.date.$lte = new Date(endDate);
+          dateFilter.date.$lte.setHours(23, 59, 59, 999);
+        }
+      }
+
+      // Get all registrations for this student
+      const registrations = await Registration.find({
+        student: studentId,
+      });
+      const registrationIds = registrations.map((r) => r._id);
+
+      if (registrationIds.length === 0) {
+        return res.status(200).json({
+          message: "No registrations found for this student",
+          success: true,
+          attendance: [],
+        });
+      }
+
+      // Fetch attendance records
+      const attendanceRecords = await Attendance.find({
+        registration: { $in: registrationIds },
+        ...dateFilter,
+      })
+        .populate("course", "title")
+        .populate({
+          path: "registration",
+          select: "student",
+          populate: {
+            path: "student",
+            select: "name rollNumber classInfo email contact",
+          },
+        })
+        .sort({ date: -1 });
+
+      res.status(200).json({
+        message: "Student attendance records fetched successfully",
+        success: true,
+        attendance: attendanceRecords,
+        count: attendanceRecords.length,
+      });
+    } catch (error) {
+      console.error("Error fetching student attendance:", error);
+      return res.status(500).json({
+        message: "Error fetching student attendance records",
+        success: false,
+        error: error.message,
+      });
+    }
+  },
+);
+
 module.exports = router;

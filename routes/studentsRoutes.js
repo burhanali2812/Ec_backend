@@ -700,4 +700,49 @@ router.post("/auth/verify-email-for-reset", async (req, res) => {
   }
 });
 
+// Get student by roll number
+router.get("/getStudentByRollNumber/:rollNumber", authMiddleWare, async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        message: "Unauthorized, Only admins can fetch student details",
+        success: false,
+      });
+    }
+
+    const { rollNumber } = req.params;
+
+    if (!rollNumber) {
+      return res.status(400).json({
+        message: "Roll number is required",
+        success: false,
+      });
+    }
+
+    const student = await Student.findOne({ rollNumber }).select(
+      "name email contact rollNumber classInfo _id",
+    );
+
+    if (!student) {
+      return res.status(404).json({
+        message: "Student not found",
+        success: false,
+      });
+    }
+
+    res.status(200).json({
+      message: "Student fetched successfully",
+      success: true,
+      student,
+    });
+  } catch (error) {
+    console.error("Error fetching student:", error);
+    return res.status(500).json({
+      message: "Error fetching student",
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
 module.exports = router;
