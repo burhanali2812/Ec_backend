@@ -639,17 +639,30 @@ router.post("/updateAttendance/:attendanceId", authMiddleWare, async (req, res) 
     }
 
     const { attendanceId } = req.params;
-    const { status, } = req.body;
+    const { status} = req.body;
     if (!["present", "absent"].includes(status)) {
       return res.status(400).json({
         message: "Invalid status value",
         success: false,
       });
     }
+  
+   
     const attendanceRecord = await Attendance.findById(attendanceId);
     if (!attendanceRecord) {
       return res.status(404).json({
         message: "Attendance record not found",
+        success: false,
+      });
+    }
+     // disallow admin to change the ststuas id date is 72 hours old from the current date
+    const now = new Date();
+    const recordDate = new Date(attendanceRecord.date);
+    const hoursDifference = (now - recordDate) / (1000 * 60 * 60);
+
+    if (hoursDifference > 72) {
+      return res.status(400).json({
+        message: "Attendance record cannot be updated as it is older than 72 hours",
         success: false,
       });
     }
