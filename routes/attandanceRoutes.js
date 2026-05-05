@@ -80,42 +80,52 @@ router.get("/session", authMiddleWare, async (req, res) => {
 
     const course = await Course.findById(courseId);
     if (!course) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Course not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Course not found",
+      });
     }
 
     const teacherId = String(req.user.id);
     const teacherAssignment = findTeacherAssignment(course, teacherId);
+
     if (!teacherAssignment) {
-      return res.status(403).json({ success: false, message: "Not allowed" });
+      return res.status(403).json({
+        success: false,
+        message: "Not allowed",
+      });
     }
 
     const allowedClasses = new Set(
-      (teacherAssignment.targetClasses || []).map(String),
+      (teacherAssignment.targetClasses || []).map(String)
     );
+
     if (!allowedClasses.has(String(classInfo))) {
-      return res
-        .status(403)
-        .json({ success: false, message: "Class not assigned to you" });
+      return res.status(403).json({
+        success: false,
+        message: "Class not assigned to you",
+      });
     }
 
+    //  NORMALIZE DATE 
+    const normalizedDate = new Date(date).toISOString().split("T")[0];
+
+    // Get students
     const registrations = await Registration.find({
       classInfo,
       aboutCourse: { $elemMatch: { course: courseId } },
     }).populate(
       "student",
-      "name email contact rollNumber classInfo fatherName fatherContact",
+      "name email contact rollNumber classInfo fatherName fatherContact"
     );
 
+    //  match string date (NO startOfDay/endOfDay)
     const attendanceDocs = await Attendance.find({
       course: courseId,
-      date: {
-        $gte: startOfDay(date),
-        $lte: endOfDay(date),
-      },
+      date: normalizedDate,
     }).populate("registration");
 
+    // Map today's attendance
     const attendanceMap = attendanceDocs.reduce((acc, item) => {
       const studentId = String(item.registration?.student || "");
       if (studentId) {
@@ -127,11 +137,13 @@ router.get("/session", authMiddleWare, async (req, res) => {
       return acc;
     }, {});
 
-    const sessionTopic = attendanceDocs[0]?.topic || "";
+    
+    const sessionTopic =
+      attendanceDocs.find((a) => a.topic)?.topic || "";
 
-    const registrationIds = registrations.map(
-      (registration) => registration._id,
-    );
+    // Get all attendance for percentage calculation
+    const registrationIds = registrations.map((r) => r._id);
+
     const allAttendanceDocs = registrationIds.length
       ? await Attendance.find({
           course: courseId,
@@ -139,6 +151,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
         }).select("registration status")
       : [];
 
+    
     const registrationStatsMap = allAttendanceDocs.reduce((acc, item) => {
       const registrationId = String(item.registration || "");
       if (!registrationId) return acc;
@@ -155,10 +168,18 @@ router.get("/session", authMiddleWare, async (req, res) => {
       return acc;
     }, {});
 
+
     const students = registrations
       .map((registration) => {
         const student = registration.student;
         if (!student) return null;
+
+        const stats =
+          registrationStatsMap[String(registration._id)] || {
+            total: 0,
+            present: 0,
+          };
+
         return {
           _id: student._id,
           name: student.name,
@@ -168,22 +189,31 @@ router.get("/session", authMiddleWare, async (req, res) => {
           classInfo: student.classInfo,
           fatherName: student.fatherName,
           fatherContact: student.fatherContact,
+
+     
           status: attendanceMap[String(student._id)]?.status || "",
-          percentage: (() => {
-            const stats = registrationStatsMap[String(registration._id)] || {
-              total: 0,
-              present: 0,
-            };
-            if (!stats.total) return 0;
-            return Math.round((stats.present / stats.total) * 100);
-          })(),
+
+      
+          percentage: stats.total
+            ? Math.round((stats.present / stats.total) * 100)
+            : 0,
         };
       })
       .filter(Boolean);
 
-    return res.json({ success: true, students, course, topic: sessionTopic });
+    return res.json({
+      success: true,
+      students,
+      course,
+      topic: sessionTopic,
+      date: normalizedDate,
+    });
   } catch (error) {
-    return res.status(500).json({ success: false, message: "Server error" });
+    console.error(error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
   }
 });
 
@@ -194,6 +224,7 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
       success: false,
     });
   }
+
   try {
     const { courseId, classInfo, date, topic, studentStatuses = [] } = req.body;
 
@@ -206,35 +237,43 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
     ) {
       return res.status(400).json({
         success: false,
-        message:
-          "courseId, classInfo, date, topic and studentStatuses are required",
+        message: "courseId, classInfo, date, topic and studentStatuses are required",
       });
     }
 
     const course = await Course.findById(courseId);
     if (!course) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Course not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Course not found",
+      });
     }
 
     const teacherId = String(req.user.id);
     const teacherAssignment = findTeacherAssignment(course, teacherId);
+
     if (!teacherAssignment) {
-      return res.status(403).json({ success: false, message: "Not allowed" });
+      return res.status(403).json({
+        success: false,
+        message: "Not allowed",
+      });
     }
 
     const allowedClasses = new Set(
-      (teacherAssignment.targetClasses || []).map(String),
+      (teacherAssignment.targetClasses || []).map(String)
     );
+
     if (!allowedClasses.has(String(classInfo))) {
-      return res
-        .status(403)
-        .json({ success: false, message: "Class not assigned to you" });
+      return res.status(403).json({
+        success: false,
+        message: "Class not assigned to you",
+      });
     }
 
+ 
+    const normalizedDate = new Date(date).toISOString().split("T")[0];
+
     const savedRecords = [];
-    const day = startOfDay(date);
 
     for (const entry of studentStatuses) {
       const studentId = String(entry.studentId || "");
@@ -250,35 +289,31 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
 
       if (!registration) continue;
 
+
       const saved = await Attendance.findOneAndUpdate(
-        { registration: registration._id, course: courseId, date: day },
         {
           registration: registration._id,
           course: courseId,
-          date: day,
-          topic: String(topic).trim(),
-          status,
-          markedBy: req.user.id,
-          verificationStatus: "pending",
+          date: normalizedDate,
         },
-        { upsert: true, new: true },
+        {
+          $set: {
+            registration: registration._id,
+            course: courseId,
+            date: normalizedDate,
+            topic: String(topic).trim(),
+            status,
+            markedBy: req.user.id,
+            verificationStatus: "pending",
+          },
+        },
+        { upsert: true, new: true }
       );
-      const getTotalLength = await Attendance.countDocuments({
-        registration: registration._id,
-        course: courseId,
-      });
-      const getPresentLength = await Attendance.countDocuments({
-        registration: registration._id,
-        course: courseId,
-        status: "present",
-      });
-      const percentage =
-        getTotalLength > 0 ? (getPresentLength / getTotalLength) * 100 : 0;
-      saved.percentage = percentage;
-      await saved.save();
 
       savedRecords.push(saved);
     }
+
+
 
     return res.json({
       success: true,
@@ -286,7 +321,11 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
       records: savedRecords,
     });
   } catch (error) {
-    return res.status(500).json({ success: false, message: "Server error" });
+    console.error(error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
   }
 });
 
