@@ -591,29 +591,41 @@ router.get("/getStudentAttendance", authMiddleWare, async (req, res) => {
       });
     }
 
-    // Build date filter - convert string dates to Date objects for proper MongoDB querying
-    let dateFilter = {};
-    if (startDate || endDate) {
-      dateFilter.date = {};
-      if (startDate) {
-        // Convert YYYY-MM-DD string to start of day Date object
-        const startDateObj = new Date(startDate);
-        startDateObj.setHours(0, 0, 0, 0);
-        dateFilter.date.$gte = startDateObj;
+    // Build query filter - use exact date matching like /session endpoint
+    let queryFilter = {
+      registration: { $in: registrationIds },
+    };
+
+    // Handle date range with exact string matching
+    if (startDate && endDate) {
+      const startStr = String(startDate).trim();
+      const endStr = String(endDate).trim();
+      
+      if (startStr === endStr) {
+        // Single date - exact match
+        queryFilter.date = startStr;
+      } else {
+        // Date range - use regex to match dates in format YYYY-MM-DD
+        const startParts = startStr.split('-');
+        const endParts = endStr.split('-');
+        
+        // Create regex pattern for date range
+        queryFilter.date = {
+          $gte: `${startStr}T00:00`,
+          $lte: `${endStr}T23:59`
+        };
       }
-      if (endDate) {
-        // Convert YYYY-MM-DD string to end of day Date object
-        const endDateObj = new Date(endDate);
-        endDateObj.setHours(23, 59, 59, 999);
-        dateFilter.date.$lte = endDateObj;
-      }
+    } else if (startDate) {
+      queryFilter.date = String(startDate).trim();
+    } else if (endDate) {
+      queryFilter.date = String(endDate).trim();
     }
 
     console.log("Fetching attendance for student:", {
       studentId,
       startDate,
       endDate,
-      dateFilter,
+      queryFilter,
     });
 
     // Get all registrations for this student
@@ -644,10 +656,7 @@ router.get("/getStudentAttendance", authMiddleWare, async (req, res) => {
     })));
 
     // Fetch attendance records WITH date filter
-    const attendanceRecords = await Attendance.find({
-      registration: { $in: registrationIds },
-      ...dateFilter,
-    })
+    const attendanceRecords = await Attendance.find(queryFilter)
       .populate("course", "title")
       .populate({
         path: "registration",
