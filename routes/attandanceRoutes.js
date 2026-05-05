@@ -219,6 +219,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
       course,
       topic: sessionTopic,
       date: normalizedDate,
+      hasAttendanceToday: attendanceDocs.length > 0,
     });
   } catch (error) {
     console.error(error);
