@@ -107,99 +107,96 @@ router.get("/session", authMiddleWare, async (req, res) => {
       });
     }
 
-    //  NORMALIZE DATE 
+    // 🔥 FIXED: DO NOT convert date
     const normalizedDate = String(date).trim();
 
-    // Get students
+    // 1. Get registrations
     const registrations = await Registration.find({
       classInfo,
       aboutCourse: { $elemMatch: { course: courseId } },
-    }).populate(
-      "student",
-      "name email contact rollNumber classInfo fatherName fatherContact"
-    );
+    }).populate("student");
 
-    //  match string date (NO startOfDay/endOfDay)
+    const registrationMap = new Map();
+    const registrationIds = [];
+
+    registrations.forEach((r) => {
+      if (r.student) {
+        registrationMap.set(String(r._id), r);
+        registrationIds.push(r._id);
+      }
+    });
+
+    // 2. Get TODAY attendance (correct filter)
     const attendanceDocs = await Attendance.find({
       course: courseId,
       date: normalizedDate,
-    }).populate("registration");
+      registration: { $in: registrationIds },
+    });
 
-    // Map today's attendance
-    const attendanceMap = attendanceDocs.reduce((acc, item) => {
-      const studentId = String(item.registration?.student || "");
-      if (studentId) {
-        acc[studentId] = {
-          status: item.status,
-          topic: item.topic || "",
-        };
-      }
-      return acc;
-    }, {});
+    // 3. Map by REGISTRATION (NOT student)
+    const attendanceMap = new Map();
 
-    
-    const sessionTopic =
-      attendanceDocs.find((a) => a.topic)?.topic || "";
+    attendanceDocs.forEach((item) => {
+      attendanceMap.set(String(item.registration), {
+        status: item.status,
+        topic: item.topic,
+      });
+    });
 
-    // Get all attendance for percentage calculation
-    const registrationIds = registrations.map((r) => r._id);
+    // 4. Get session topic safely
+    const sessionTopic = attendanceDocs[0]?.topic || "";
 
-    const allAttendanceDocs = registrationIds.length
-      ? await Attendance.find({
-          course: courseId,
-          registration: { $in: registrationIds },
-        }).select("registration status")
-      : [];
+    // 5. Get full attendance history for percentage
+    const allAttendanceDocs = await Attendance.find({
+      course: courseId,
+      registration: { $in: registrationIds },
+    }).select("registration status");
 
-    
-    const registrationStatsMap = allAttendanceDocs.reduce((acc, item) => {
-      const registrationId = String(item.registration || "");
-      if (!registrationId) return acc;
+    const statsMap = new Map();
 
-      if (!acc[registrationId]) {
-        acc[registrationId] = { total: 0, present: 0 };
+    allAttendanceDocs.forEach((item) => {
+      const id = String(item.registration);
+
+      if (!statsMap.has(id)) {
+        statsMap.set(id, { total: 0, present: 0 });
       }
 
-      acc[registrationId].total += 1;
+      const stats = statsMap.get(id);
+      stats.total++;
+
       if (item.status === "present") {
-        acc[registrationId].present += 1;
+        stats.present++;
       }
+    });
 
-      return acc;
-    }, {});
+    // 6. FINAL RESPONSE
+    const students = registrations.map((r) => {
+      const student = r.student;
 
+      if (!student) return null;
 
-    const students = registrations
-      .map((registration) => {
-        const student = registration.student;
-        if (!student) return null;
+      const attendance = attendanceMap.get(String(r._id)) || {};
+      const stats = statsMap.get(String(r._id)) || { total: 0, present: 0 };
 
-        const stats =
-          registrationStatsMap[String(registration._id)] || {
-            total: 0,
-            present: 0,
-          };
+      return {
+        _id: student._id,
+        name: student.name,
+        email: student.email,
+        contact: student.contact,
+        rollNumber: student.rollNumber,
+        classInfo: student.classInfo,
+        fatherName: student.fatherName,
+        fatherContact: student.fatherContact,
 
-        return {
-          _id: student._id,
-          name: student.name,
-          email: student.email,
-          contact: student.contact,
-          rollNumber: student.rollNumber,
-          classInfo: student.classInfo,
-          fatherName: student.fatherName,
-          fatherContact: student.fatherContact,
+        // TODAY attendance
+        status: attendance.status || "",
 
-     
-          status: attendanceMap[String(student._id)]?.status || "",
-
-      
-          percentage: stats.total
-            ? Math.round((stats.present / stats.total) * 100)
-            : 0,
-        };
-      })
-      .filter(Boolean);
+        // percentage
+        percentage: stats.total
+          ? Math.round((stats.present / stats.total) * 100)
+          : 0,
+      };
+    }).filter(Boolean);
 
     return res.json({
       success: true,
@@ -208,6 +205,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
       topic: sessionTopic,
       date: normalizedDate,
     });
+
   } catch (error) {
     console.error(error);
     return res.status(500).json({
