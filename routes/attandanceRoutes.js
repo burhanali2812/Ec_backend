@@ -110,6 +110,11 @@ router.get("/session", authMiddleWare, async (req, res) => {
     //  FIXED: DO NOT convert date
     const normalizedDate = String(date).trim();
 
+    console.log("DATE CHECK:", {
+  received: date,
+  normalized: normalizedDate,
+});
+
     // 1. Get registrations
     const registrations = await Registration.find({
       classInfo,
