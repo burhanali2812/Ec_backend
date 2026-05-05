@@ -97,7 +97,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
     }
 
     const allowedClasses = new Set(
-      (teacherAssignment.targetClasses || []).map(String)
+      (teacherAssignment.targetClasses || []).map(String),
     );
 
     if (!allowedClasses.has(String(classInfo))) {
@@ -107,7 +107,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
       });
     }
 
-    // 🔥 FIXED: DO NOT convert date
+    //  FIXED: DO NOT convert date
     const normalizedDate = String(date).trim();
 
     // 1. Get registrations
@@ -126,11 +126,19 @@ router.get("/session", authMiddleWare, async (req, res) => {
       }
     });
 
-    // 2. Get TODAY attendance (correct filter)
+    // 2. Get TODAY attendance with EXACT date matching (YYYY-MM-DD format)
     const attendanceDocs = await Attendance.find({
       course: courseId,
-      date: normalizedDate,
+      date: normalizedDate, // Must be exact match in YYYY-MM-DD format
       registration: { $in: registrationIds },
+    });
+
+    // DEBUG: Log the query and results
+    console.log("Attendance Query:", {
+      courseId,
+      date: normalizedDate,
+      registrationIds: registrationIds.length,
+      attendanceFound: attendanceDocs.length,
     });
 
     // 3. Map by REGISTRATION (NOT student)
@@ -170,33 +178,35 @@ router.get("/session", authMiddleWare, async (req, res) => {
     });
 
     // 6. FINAL RESPONSE
-    const students = registrations.map((r) => {
-      const student = r.student;
+    const students = registrations
+      .map((r) => {
+        const student = r.student;
 
-      if (!student) return null;
+        if (!student) return null;
 
-      const attendance = attendanceMap.get(String(r._id)) || {};
-      const stats = statsMap.get(String(r._id)) || { total: 0, present: 0 };
+        const attendance = attendanceMap.get(String(r._id)) || {};
+        const stats = statsMap.get(String(r._id)) || { total: 0, present: 0 };
 
-      return {
-        _id: student._id,
-        name: student.name,
-        email: student.email,
-        contact: student.contact,
-        rollNumber: student.rollNumber,
-        classInfo: student.classInfo,
-        fatherName: student.fatherName,
-        fatherContact: student.fatherContact,
+        return {
+          _id: student._id,
+          name: student.name,
+          email: student.email,
+          contact: student.contact,
+          rollNumber: student.rollNumber,
+          classInfo: student.classInfo,
+          fatherName: student.fatherName,
+          fatherContact: student.fatherContact,
 
-        // TODAY attendance
-        status: attendance.status || "",
+          // TODAY attendance
+          status: attendance.status || "",
 
-        // percentage
-        percentage: stats.total
-          ? Math.round((stats.present / stats.total) * 100)
-          : 0,
-      };
-    }).filter(Boolean);
+          // percentage
+          percentage: stats.total
+            ? Math.round((stats.present / stats.total) * 100)
+            : 0,
+        };
+      })
+      .filter(Boolean);
 
     return res.json({
       success: true,
@@ -205,7 +215,6 @@ router.get("/session", authMiddleWare, async (req, res) => {
       topic: sessionTopic,
       date: normalizedDate,
     });
-
   } catch (error) {
     console.error(error);
     return res.status(500).json({
@@ -235,7 +244,8 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
     ) {
       return res.status(400).json({
         success: false,
-        message: "courseId, classInfo, date, topic and studentStatuses are required",
+        message:
+          "courseId, classInfo, date, topic and studentStatuses are required",
       });
     }
 
@@ -258,7 +268,7 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
     }
 
     const allowedClasses = new Set(
-      (teacherAssignment.targetClasses || []).map(String)
+      (teacherAssignment.targetClasses || []).map(String),
     );
 
     if (!allowedClasses.has(String(classInfo))) {
@@ -268,7 +278,6 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
       });
     }
 
- 
     const normalizedDate = new Date(date).toISOString().split("T")[0];
 
     const savedRecords = [];
@@ -287,7 +296,6 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
 
       if (!registration) continue;
 
-
       const saved = await Attendance.findOneAndUpdate(
         {
           registration: registration._id,
@@ -305,13 +313,11 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
             verificationStatus: "pending",
           },
         },
-        { upsert: true, new: true }
+        { upsert: true, new: true },
       );
 
       savedRecords.push(saved);
     }
-
-
 
     return res.json({
       success: true,
@@ -635,114 +641,123 @@ router.get("/getStudentAttendance", authMiddleWare, async (req, res) => {
   }
 });
 
-router.delete("/deleteAttendance/:attendanceId", authMiddleWare, async (req, res) => {
-  try {
-    if (req.user.role !== "admin") {
-      return res.status(403).json({
-        message: "Unauthorized, Only admins can delete attendance records",
+router.delete(
+  "/deleteAttendance/:attendanceId",
+  authMiddleWare,
+  async (req, res) => {
+    try {
+      if (req.user.role !== "admin") {
+        return res.status(403).json({
+          message: "Unauthorized, Only admins can delete attendance records",
+          success: false,
+        });
+      }
+      const { attendanceId } = req.params;
+
+      const deleted = await Attendance.findByIdAndDelete(attendanceId);
+      if (!deleted) {
+        return res.status(404).json({
+          message: "Attendance record not found",
+          success: false,
+        });
+      }
+      return res.status(200).json({
+        message: "Attendance record deleted successfully",
+        success: true,
+      });
+    } catch (error) {
+      console.error("Error deleting attendance record:", error);
+      return res.status(500).json({
+        message: "Error deleting attendance record",
         success: false,
+        error: error.message,
       });
     }
-    const { attendanceId } = req.params;
+  },
+);
 
-    const deleted = await Attendance.findByIdAndDelete(attendanceId);
-    if (!deleted) {
-      return res.status(404).json({
-        message: "Attendance record not found",
+router.post(
+  "/updateAttendance/:attendanceId",
+  authMiddleWare,
+  async (req, res) => {
+    try {
+      if (req.user.role !== "admin") {
+        return res.status(403).json({
+          message: "Unauthorized, Only admins can update attendance records",
+          success: false,
+        });
+      }
+
+      const { attendanceId } = req.params;
+      const { status } = req.body;
+      if (!["present", "absent"].includes(status)) {
+        return res.status(400).json({
+          message: "Invalid status value",
+          success: false,
+        });
+      }
+
+      const attendanceRecord = await Attendance.findById(attendanceId);
+      if (!attendanceRecord) {
+        return res.status(404).json({
+          message: "Attendance record not found",
+          success: false,
+        });
+      }
+      // disallow admin to change the ststuas id date is 72 hours old from the current date
+      const now = new Date();
+      const recordDate = new Date(attendanceRecord.date);
+      const hoursDifference = (now - recordDate) / (1000 * 60 * 60);
+
+      if (hoursDifference > 72) {
+        return res.status(400).json({
+          message:
+            "Attendance record cannot be updated as it is older than 72 hours",
+          success: false,
+        });
+      }
+
+      const updatedPercentage = await Attendance.countDocuments({
+        registration: attendanceRecord.registration,
+        course: attendanceRecord.course,
+      });
+      const updatedPresent = await Attendance.countDocuments({
+        registration: attendanceRecord.registration,
+        course: attendanceRecord.course,
+        status: "present",
+      });
+      const percentage =
+        updatedPercentage > 0 ? (updatedPresent / updatedPercentage) * 100 : 0;
+      const updated = await Attendance.findByIdAndUpdate(
+        attendanceId,
+        {
+          status,
+          percentage,
+        },
+        { new: true },
+      );
+
+      if (!updated) {
+        return res.status(404).json({
+          message: "Attendance record not found",
+          success: false,
+        });
+      }
+
+      return res.status(200).json({
+        message: "Attendance record updated successfully",
+        success: true,
+        attendance: updated,
+      });
+    } catch (error) {
+      console.error("Error updating attendance record:", error);
+      return res.status(500).json({
+        message: "Error updating attendance record",
         success: false,
+        error: error.message,
       });
     }
-    return res.status(200).json({
-      message: "Attendance record deleted successfully",
-      success: true,
-    });
-  } catch (error) {
-    console.error("Error deleting attendance record:", error);
-    return res.status(500).json({
-      message: "Error deleting attendance record",
-      success: false,
-      error: error.message,
-    });
-  }
-});
-
-router.post("/updateAttendance/:attendanceId", authMiddleWare, async (req, res) => {
-  try {
-    if (req.user.role !== "admin") {
-      return res.status(403).json({
-        message: "Unauthorized, Only admins can update attendance records",
-        success: false,
-      });
-    }
-
-    const { attendanceId } = req.params;
-    const { status} = req.body;
-    if (!["present", "absent"].includes(status)) {
-      return res.status(400).json({
-        message: "Invalid status value",
-        success: false,
-      });
-    }
-  
-   
-    const attendanceRecord = await Attendance.findById(attendanceId);
-    if (!attendanceRecord) {
-      return res.status(404).json({
-        message: "Attendance record not found",
-        success: false,
-      });
-    }
-     // disallow admin to change the ststuas id date is 72 hours old from the current date
-    const now = new Date();
-    const recordDate = new Date(attendanceRecord.date);
-    const hoursDifference = (now - recordDate) / (1000 * 60 * 60);
-
-    if (hoursDifference > 72) {
-      return res.status(400).json({
-        message: "Attendance record cannot be updated as it is older than 72 hours",
-        success: false,
-      });
-    }
-
-    const updatedPercentage = await Attendance.countDocuments({
-      registration: attendanceRecord.registration,
-      course: attendanceRecord.course,
-    });
-    const updatedPresent = await Attendance.countDocuments({
-      registration: attendanceRecord.registration,
-      course: attendanceRecord.course,
-      status: "present",
-    });
-    const percentage = updatedPercentage > 0 ? (updatedPresent / updatedPercentage) * 100 : 0;
-    const updated = await Attendance.findByIdAndUpdate(
-      attendanceId,
-      {
-        status,
-        percentage,
-      },
-      { new: true },
-    );
-
-    if (!updated) {
-      return res.status(404).json({
-        message: "Attendance record not found",
-        success: false,
-      });
-    }
-
-    return res.status(200).json({
-      message: "Attendance record updated successfully",
-      success: true,
-      attendance: updated,
-    });
-  } catch (error) {
-    console.error("Error updating attendance record:", error);
-    return res.status(500).json({
-      message: "Error updating attendance record",
-      success: false,
-      error: error.message,
-    });
-  }
-});
+  },
+);
 
 module.exports = router;
