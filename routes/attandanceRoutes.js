@@ -108,7 +108,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
     }
 
     //  NORMALIZE DATE 
-    const normalizedDate = new Date(date).toISOString().split("T")[0];
+    const normalizedDate = String(date).trim();
 
     // Get students
     const registrations = await Registration.find({
