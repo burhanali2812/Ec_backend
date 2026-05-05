@@ -590,19 +590,16 @@ router.get("/getStudentAttendance", authMiddleWare, async (req, res) => {
         success: false,
       });
     }
-    
 
-    // Build date filter
+    // Build date filter using string comparison (dates stored as YYYY-MM-DD strings)
     let dateFilter = {};
     if (startDate || endDate) {
       dateFilter.date = {};
       if (startDate) {
-        dateFilter.date.$gte = new Date(startDate);
-        dateFilter.date.$gte.setHours(0, 0, 0, 0);
+        dateFilter.date.$gte = String(startDate).trim();
       }
       if (endDate) {
-        dateFilter.date.$lte = new Date(endDate);
-        dateFilter.date.$lte.setHours(23, 59, 59, 999);
+        dateFilter.date.$lte = String(endDate).trim();
       }
     }
 
@@ -612,7 +609,6 @@ router.get("/getStudentAttendance", authMiddleWare, async (req, res) => {
       endDate,
       dateFilter,
     });
-        
 
     // Get all registrations for this student
     const registrations = await Registration.find({
