@@ -114,9 +114,9 @@ router.get("/session", authMiddleWare, async (req, res) => {
     const normalizedDate = String(date).trim();
 
     console.log("DATE CHECK:", {
-  received: date,
-  normalized: normalizedDate,
-});
+      received: date,
+      normalized: normalizedDate,
+    });
 
     // 1. Get registrations
     const registrations = await Registration.find({
@@ -590,6 +590,7 @@ router.get("/getStudentAttendance", authMiddleWare, async (req, res) => {
         success: false,
       });
     }
+    
 
     // Build date filter
     let dateFilter = {};
@@ -604,6 +605,14 @@ router.get("/getStudentAttendance", authMiddleWare, async (req, res) => {
         dateFilter.date.$lte.setHours(23, 59, 59, 999);
       }
     }
+
+    console.log("Fetching attendance for student:", {
+      studentId,
+      startDate,
+      endDate,
+      dateFilter,
+    });
+        
 
     // Get all registrations for this student
     const registrations = await Registration.find({
