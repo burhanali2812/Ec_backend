@@ -110,12 +110,16 @@ router.get("/session", authMiddleWare, async (req, res) => {
       }
     }
 
-    //  FIXED: DO NOT convert date
-    const normalizedDate = String(date).trim();
+    // Convert incoming date string (YYYY-MM-DD) to Date object for comparison
+    const dateObj = new Date(date);
+    dateObj.setHours(0, 0, 0, 0);
+    const endOfDateObj = new Date(date);
+    endOfDateObj.setHours(23, 59, 59, 999);
 
     console.log("DATE CHECK:", {
       received: date,
-      normalized: normalizedDate,
+      dateObj,
+      endOfDateObj,
     });
 
     // 1. Get registrations
@@ -134,10 +138,10 @@ router.get("/session", authMiddleWare, async (req, res) => {
       }
     });
 
-    // 2. Get TODAY attendance with EXACT date matching (YYYY-MM-DD format)
+    // 2. Get TODAY attendance with date range matching (Date objects)
     const attendanceDocs = await Attendance.find({
       course: courseId,
-      date: normalizedDate, // Must be exact match in YYYY-MM-DD format
+      date: { $gte: dateObj, $lte: endOfDateObj },
       registration: { $in: registrationIds },
     });
 
@@ -288,7 +292,9 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
       });
     }
 
-    const normalizedDate = new Date(date).toISOString().split("T")[0];
+    // Convert date string (YYYY-MM-DD) to Date object with start of day
+    const dateObj = new Date(date);
+    dateObj.setHours(0, 0, 0, 0);
 
     const savedRecords = [];
 
@@ -310,13 +316,16 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
         {
           registration: registration._id,
           course: courseId,
-          date: normalizedDate,
+          date: {
+            $gte: dateObj,
+            $lte: new Date(dateObj.getTime() + 86399999), // End of day
+          },
         },
         {
           $set: {
             registration: registration._id,
             course: courseId,
-            date: normalizedDate,
+            date: dateObj,
             topic: String(topic).trim(),
             status,
             markedBy: req.user.id,
@@ -591,43 +600,6 @@ router.get("/getStudentAttendance", authMiddleWare, async (req, res) => {
       });
     }
 
-    // Build query filter - use exact date matching like /session endpoint
-    let queryFilter = {
-      registration: { $in: registrationIds },
-    };
-
-    // Handle date range with exact string matching
-    if (startDate && endDate) {
-      const startStr = String(startDate).trim();
-      const endStr = String(endDate).trim();
-      
-      if (startStr === endStr) {
-        // Single date - exact match
-        queryFilter.date = startStr;
-      } else {
-        // Date range - use regex to match dates in format YYYY-MM-DD
-        const startParts = startStr.split('-');
-        const endParts = endStr.split('-');
-        
-        // Create regex pattern for date range
-        queryFilter.date = {
-          $gte: `${startStr}T00:00`,
-          $lte: `${endStr}T23:59`
-        };
-      }
-    } else if (startDate) {
-      queryFilter.date = String(startDate).trim();
-    } else if (endDate) {
-      queryFilter.date = String(endDate).trim();
-    }
-
-    console.log("Fetching attendance for student:", {
-      studentId,
-      startDate,
-      endDate,
-      queryFilter,
-    });
-
     // Get all registrations for this student
     const registrations = await Registration.find({
       student: studentId,
@@ -644,16 +616,32 @@ router.get("/getStudentAttendance", authMiddleWare, async (req, res) => {
       });
     }
 
-    // Debug: Check what attendance records exist for these registrations (without date filter)
-    const allAttendanceForReg = await Attendance.find({
+    // Build query filter - convert date strings to Date objects
+    let queryFilter = {
       registration: { $in: registrationIds },
-    }).select("registration date").limit(5);
-    
-    console.log("Sample attendance records in DB:", allAttendanceForReg.map(a => ({
-      registrationId: a.registration.toString(),
-      dateType: typeof a.date,
-      dateValue: a.date,
-    })));
+    };
+
+    // Handle date range with Date objects
+    if (startDate || endDate) {
+      queryFilter.date = {};
+      if (startDate) {
+        const startDateObj = new Date(startDate);
+        startDateObj.setHours(0, 0, 0, 0);
+        queryFilter.date.$gte = startDateObj;
+      }
+      if (endDate) {
+        const endDateObj = new Date(endDate);
+        endDateObj.setHours(23, 59, 59, 999);
+        queryFilter.date.$lte = endDateObj;
+      }
+    }
+
+    console.log("Fetching attendance for student:", {
+      studentId,
+      startDate,
+      endDate,
+      queryFilter,
+    });
 
     // Fetch attendance records WITH date filter
     const attendanceRecords = await Attendance.find(queryFilter)
@@ -668,7 +656,10 @@ router.get("/getStudentAttendance", authMiddleWare, async (req, res) => {
       })
       .sort({ date: -1 });
 
-    console.log("Attendance records found (with filter):", attendanceRecords.length);
+    console.log(
+      "Attendance records found (with filter):",
+      attendanceRecords.length,
+    );
 
     res.status(200).json({
       message: "Student attendance records fetched successfully",
