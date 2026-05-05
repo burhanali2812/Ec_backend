@@ -632,7 +632,18 @@ router.get("/getStudentAttendance", authMiddleWare, async (req, res) => {
       });
     }
 
-    // Fetch attendance records
+    // Debug: Check what attendance records exist for these registrations (without date filter)
+    const allAttendanceForReg = await Attendance.find({
+      registration: { $in: registrationIds },
+    }).select("registration date").limit(5);
+    
+    console.log("Sample attendance records in DB:", allAttendanceForReg.map(a => ({
+      registrationId: a.registration.toString(),
+      dateType: typeof a.date,
+      dateValue: a.date,
+    })));
+
+    // Fetch attendance records WITH date filter
     const attendanceRecords = await Attendance.find({
       registration: { $in: registrationIds },
       ...dateFilter,
@@ -648,7 +659,7 @@ router.get("/getStudentAttendance", authMiddleWare, async (req, res) => {
       })
       .sort({ date: -1 });
 
-    console.log("Attendance records found:", attendanceRecords.length);
+    console.log("Attendance records found (with filter):", attendanceRecords.length);
 
     res.status(200).json({
       message: "Student attendance records fetched successfully",
