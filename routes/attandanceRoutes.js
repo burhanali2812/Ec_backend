@@ -591,15 +591,21 @@ router.get("/getStudentAttendance", authMiddleWare, async (req, res) => {
       });
     }
 
-    // Build date filter using string comparison (dates stored as YYYY-MM-DD strings)
+    // Build date filter - convert string dates to Date objects for proper MongoDB querying
     let dateFilter = {};
     if (startDate || endDate) {
       dateFilter.date = {};
       if (startDate) {
-        dateFilter.date.$gte = String(startDate).trim();
+        // Convert YYYY-MM-DD string to start of day Date object
+        const startDateObj = new Date(startDate);
+        startDateObj.setHours(0, 0, 0, 0);
+        dateFilter.date.$gte = startDateObj;
       }
       if (endDate) {
-        dateFilter.date.$lte = String(endDate).trim();
+        // Convert YYYY-MM-DD string to end of day Date object
+        const endDateObj = new Date(endDate);
+        endDateObj.setHours(23, 59, 59, 999);
+        dateFilter.date.$lte = endDateObj;
       }
     }
 
@@ -615,8 +621,8 @@ router.get("/getStudentAttendance", authMiddleWare, async (req, res) => {
       student: studentId,
     });
     const registrationIds = registrations.map((r) => r._id);
-    console.log("Registrations found:", registrations);
-console.log("Registration IDs:", registrationIds);
+    console.log("Registrations found:", registrations.length);
+    console.log("Registration IDs:", registrationIds);
 
     if (registrationIds.length === 0) {
       return res.status(200).json({
@@ -641,6 +647,8 @@ console.log("Registration IDs:", registrationIds);
         },
       })
       .sort({ date: -1 });
+
+    console.log("Attendance records found:", attendanceRecords.length);
 
     res.status(200).json({
       message: "Student attendance records fetched successfully",
