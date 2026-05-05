@@ -89,7 +89,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
     const teacherId = String(req.user.id);
     const teacherAssignment = findTeacherAssignment(course, teacherId);
 
-    if (!teacherAssignment) {
+    if (req.user.role !== "admin" && !teacherAssignment) {
       return res.status(403).json({
         success: false,
         message: "Not allowed",
