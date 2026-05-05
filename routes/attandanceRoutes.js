@@ -615,6 +615,8 @@ router.get("/getStudentAttendance", authMiddleWare, async (req, res) => {
       student: studentId,
     });
     const registrationIds = registrations.map((r) => r._id);
+    console.log("Registrations found:", registrations);
+console.log("Registration IDs:", registrationIds);
 
     if (registrationIds.length === 0) {
       return res.status(200).json({
