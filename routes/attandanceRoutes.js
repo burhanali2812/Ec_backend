@@ -96,8 +96,11 @@ router.get("/session", authMiddleWare, async (req, res) => {
       });
     }
 
+    // For admins, allow all classes; for teachers, restrict to their assigned classes
     const allowedClasses = new Set(
-      (teacherAssignment.targetClasses || []).map(String),
+      req.user.role === "admin" 
+        ? (course.classes || course.classess || []).map(String)
+        : (teacherAssignment?.targetClasses || []).map(String),
     );
 
     if (!allowedClasses.has(String(classInfo))) {
