@@ -30,8 +30,11 @@ router.post("/applyLeave", authMiddleWare, async (req, res) => {
       return res.status(404).json({ message: "Applicant not found" });
     }
 
+    const isTeacher = finalApplicantRole === Teacher;
     const newLeaveApplication = new LeaveApplication({
-      applicant: finalApplicantRole === Teacher ? "Teacher" : "Student",
+      applicant: isTeacher ? "Teacher" : "Student",
+      studentId: isTeacher ? null : applicantId,
+      teacherId: isTeacher ? applicantId : null,
       name,
       email,
       reason,
@@ -175,6 +178,60 @@ router.get("/myLeaves", authMiddleWare, async (req, res) => {
       message: "Error fetching leaves",
       success: false,
       error,
+    });
+  }
+});
+
+// Check if students have approved leaves for a specific date
+router.post("/checkStudentLeaves", authMiddleWare, async (req, res) => {
+  try {
+    const { studentIds, date } = req.body;
+
+    if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
+      return res.status(400).json({
+        message: "Student IDs array is required",
+        success: false,
+      });
+    }
+
+    if (!date) {
+      return res.status(400).json({
+        message: "Date is required",
+        success: false,
+      });
+    }
+
+    // Query for approved leaves that cover the given date
+    const leaves = await LeaveApplication.find({
+      applicant: "Student",
+      studentId: { $in: studentIds },
+      status: "Approved",
+      $expr: {
+        $and: [
+          { $lte: ["$fromDate", date] }, // Leave starts on or before the date
+          { $gte: ["$toDate", date] }, // Leave ends on or after the date
+        ],
+      },
+    });
+
+    // Map leave records with student ID
+    const leavesByStudentId = leaves.map((leave) => ({
+      studentId: leave.studentId.toString(),
+      status: leave.status,
+      fromDate: leave.fromDate,
+      toDate: leave.toDate,
+    }));
+
+    return res.json({
+      success: true,
+      leaves: leavesByStudentId || [],
+    });
+  } catch (error) {
+    console.error("Error checking student leaves:", error);
+    return res.status(500).json({
+      message: "Error checking student leaves",
+      success: false,
+      error: error.message,
     });
   }
 });
