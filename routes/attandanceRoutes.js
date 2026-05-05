@@ -96,18 +96,18 @@ router.get("/session", authMiddleWare, async (req, res) => {
       });
     }
 
-    // For admins, allow all classes; for teachers, restrict to their assigned classes
-    const allowedClasses = new Set(
-      req.user.role === "admin" 
-        ? (course.classes || course.classess || []).map(String)
-        : (teacherAssignment?.targetClasses || []).map(String),
-    );
+    // For admins, skip class validation; for teachers, restrict to their assigned classes
+    if (req.user.role !== "admin") {
+      const allowedClasses = new Set(
+        (teacherAssignment?.targetClasses || []).map(String),
+      );
 
-    if (!allowedClasses.has(String(classInfo))) {
-      return res.status(403).json({
-        success: false,
-        message: "Class not assigned to you",
-      });
+      if (!allowedClasses.has(String(classInfo))) {
+        return res.status(403).json({
+          success: false,
+          message: "Class not assigned to you",
+        });
+      }
     }
 
     //  FIXED: DO NOT convert date
