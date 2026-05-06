@@ -132,9 +132,6 @@ router.get("/session", authMiddleWare, async (req, res) => {
         message: "Attendance session already exists for this course, class and date",
       }) ;
     }
-
-   
-
     const course = await Course.findById(courseId);
     if (!course) {
       return res.status(404).json({
