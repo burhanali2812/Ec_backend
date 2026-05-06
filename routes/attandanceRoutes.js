@@ -69,12 +69,26 @@ router.get("/classes/:courseId", authMiddleWare, async (req, res) => {
 
 router.get("/session", authMiddleWare, async (req, res) => {
   try {
-    const { courseId, classInfo, date } = req.query;
+    const { courseId, classInfo, date , fetchedBy} = req.query;
 
     if (!courseId || !classInfo || !date) {
       return res.status(400).json({
         success: false,
         message: "courseId, classInfo and date are required",
+      });
+    }
+
+    const alreadyExists = await Attendance.findOne({
+      course: courseId,
+      date: {
+        $gte: startOfDay(date),
+        $lte: endOfDay(date),
+      },
+    });
+    if (alreadyExists && fetchedBy === "teacher") {
+      return res.status(400).json({
+        success: false,
+        message: "Attendance for this session has already been marked",
       });
     }
 

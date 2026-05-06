@@ -35,11 +35,7 @@ const attendanceSchema = new mongoose.Schema({
     default: 0,
   },
 
-  verificationStatus: {
-    type: String,
-    enum: ["pending", "approved", "rejected"],
-    default: "pending",
-  },
+
 
   markedBy: {
     type: mongoose.Schema.Types.ObjectId,
