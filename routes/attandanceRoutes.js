@@ -66,46 +66,46 @@ router.get("/classes/:courseId", authMiddleWare, async (req, res) => {
     return res.status(500).json({ success: false, message: "Server error" });
   }
 });
-router.patch("/migrate-classinfo", async (req, res) => {
-  try {
+// router.patch("/migrate-classinfo", async (req, res) => {
+//   try {
     
-    // Find records missing classInfo
-    const records = await Attendance.find({
-      $or: [
-        { classInfo: { $exists: false } },
-        { classInfo: null },
-        { classInfo: "" },
-      ],
-    }).populate("registration", "classInfo");
+//     // Find records missing classInfo
+//     const records = await Attendance.find({
+//       $or: [
+//         { classInfo: { $exists: false } },
+//         { classInfo: null },
+//         { classInfo: "" },
+//       ],
+//     }).populate("registration", "classInfo");
 
-    let updatedCount = 0;
-    let skipped = 0;
+//     let updatedCount = 0;
+//     let skipped = 0;
 
-    for (const rec of records) {
-      if (rec.registration && rec.registration.classInfo) {
-        rec.classInfo = rec.registration.classInfo;
-        await rec.save();
-        updatedCount++;
-      } else {
-        skipped++;
-      }
-    }
+//     for (const rec of records) {
+//       if (rec.registration && rec.registration.classInfo) {
+//         rec.classInfo = rec.registration.classInfo;
+//         await rec.save();
+//         updatedCount++;
+//       } else {
+//         skipped++;
+//       }
+//     }
 
-    return res.json({
-      success: true,
-      message: "Migration completed",
-      totalFound: records.length,
-      updated: updatedCount,
-      skipped,
-    });
-  } catch (error) {
-    console.error("Migration error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Migration failed",
-    });
-  }
-});
+//     return res.json({
+//       success: true,
+//       message: "Migration completed",
+//       totalFound: records.length,
+//       updated: updatedCount,
+//       skipped,
+//     });
+//   } catch (error) {
+//     console.error("Migration error:", error);
+//     return res.status(500).json({
+//       success: false,
+//       message: "Migration failed",
+//     });
+//   }
+// });
 
 router.get("/session", authMiddleWare, async (req, res) => {
   try {
@@ -116,6 +116,22 @@ router.get("/session", authMiddleWare, async (req, res) => {
         success: false,
         message: "courseId, classInfo and date are required",
       });
+    }
+
+    const alreadyExists = await Attendance.findOne({
+      course: courseId,
+      classInfo,
+      date: {
+        $gte: startOfDay(date),
+        $lte: endOfDay(date),
+      },
+    });
+    if (alreadyExists && fetchedBy === "teacher") {
+      return res.json({
+        success: true,
+        message: "Attendance session already exists for this course, class and date",
+        alreadyExists: true,
+      }) ;
     }
 
    
