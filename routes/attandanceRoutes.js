@@ -148,7 +148,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
     // DEBUG: Log the query and results
     console.log("Attendance Query:", {
       courseId,
-      date: normalizedDate,
+      date,
       registrationIds: registrationIds.length,
       attendanceFound: attendanceDocs.length,
     });
@@ -225,7 +225,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
       students,
       course,
       topic: sessionTopic,
-      date: normalizedDate,
+      date,
       hasAttendanceToday: attendanceDocs.length > 0,
     });
   } catch (error) {
