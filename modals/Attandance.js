@@ -34,6 +34,11 @@ const attendanceSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  classInfo: {
+    type: String,
+    enum: ["9th", "10th", "11th", "12th", "pre-9th"],
+    required: true,
+  },
 
 
 
