@@ -127,10 +127,9 @@ router.get("/session", authMiddleWare, async (req, res) => {
       },
     });
     if (alreadyExists && fetchedBy === "teacher") {
-      return res.json({
-        success: true,
+      return res.status(400).json({
+        success: false,
         message: "Attendance session already exists for this course, class and date",
-        alreadyExists: true,
       }) ;
     }
 
