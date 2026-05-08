@@ -196,6 +196,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
     // 2. Get TODAY attendance with date range matching (Date objects)
     const attendanceDocs = await Attendance.find({
       course: courseId,
+      classInfo,
       date: { $gte: dateObj, $lte: endOfDateObj },
       registration: { $in: registrationIds },
     });
@@ -204,6 +205,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
     console.log("Attendance Query:", {
       courseId,
       date,
+      classInfo,
       registrationIds: registrationIds.length,
       attendanceFound: attendanceDocs.length,
     });
