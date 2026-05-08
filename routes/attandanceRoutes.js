@@ -160,6 +160,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
         return res.status(403).json({
           success: false,
           message: "Class not assigned to you",
+          isClassAllowed: false,
         });
       }
     }
