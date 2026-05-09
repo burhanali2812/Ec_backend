@@ -283,7 +283,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
       course,
       topic: sessionTopic,
       date,
-      hasAttendanceToday: attendanceDocs.length > 0,
+      hasAttendanceToday: alreadyExists ? true : false,
     });
   } catch (error) {
     console.error(error);
