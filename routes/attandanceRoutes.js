@@ -200,6 +200,12 @@ router.get("/session", authMiddleWare, async (req, res) => {
       date: { $gte: dateObj, $lte: endOfDateObj },
       registration: { $in: registrationIds },
     });
+    if(attendanceDocs.length > 0 && fetchedBy === "teacherForMarkAttendance"){
+      return res.status(400).json({
+        success: false,
+        message: "Attendance session already exists for this course, class and date",
+      }) ;
+    }
 
     // DEBUG: Log the query and results
     console.log("Attendance Query:", {
