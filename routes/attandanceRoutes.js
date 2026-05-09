@@ -289,6 +289,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
       course,
       topic: sessionTopic,
       date,
+      totalStudents: students.length,
       hasAttendanceToday: alreadyExists ? true : false,
     });
   } catch (error) {
