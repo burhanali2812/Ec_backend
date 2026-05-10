@@ -109,8 +109,11 @@ router.get("/classes/:courseId", authMiddleWare, async (req, res) => {
 
 router.get("/session", authMiddleWare, async (req, res) => {
   try {
-    const { courseId, classInfo, date , fetchedBy} = req.query;
+    let { courseId, classInfo, date, fetchedBy } = req.query;
 
+    // =========================
+    // VALIDATION
+    // =========================
     if (!courseId || !classInfo || !date) {
       return res.status(400).json({
         success: false,
@@ -118,8 +121,29 @@ router.get("/session", authMiddleWare, async (req, res) => {
       });
     }
 
+    // Normalize class name
+    classInfo = String(classInfo).trim().toLowerCase();
 
+    // =========================
+    // DATE RANGE
+    // =========================
+    const startDate = new Date(date);
+    startDate.setHours(0, 0, 0, 0);
+
+    const endDate = new Date(date);
+    endDate.setHours(23, 59, 59, 999);
+
+    console.log("DATE CHECK:", {
+      received: date,
+      startDate,
+      endDate,
+    });
+
+    // =========================
+    // COURSE CHECK
+    // =========================
     const course = await Course.findById(courseId);
+
     if (!course) {
       return res.status(404).json({
         success: false,
@@ -127,8 +151,15 @@ router.get("/session", authMiddleWare, async (req, res) => {
       });
     }
 
+    // =========================
+    // TEACHER VALIDATION
+    // =========================
     const teacherId = String(req.user.id);
-    const teacherAssignment = findTeacherAssignment(course, teacherId);
+
+    const teacherAssignment = findTeacherAssignment(
+      course,
+      teacherId
+    );
 
     if (req.user.role !== "admin" && !teacherAssignment) {
       return res.status(403).json({
@@ -137,13 +168,17 @@ router.get("/session", authMiddleWare, async (req, res) => {
       });
     }
 
-    // For admins, skip class validation; for teachers, restrict to their assigned classes
+    // =========================
+    // CLASS ACCESS CHECK
+    // =========================
     if (req.user.role !== "admin") {
       const allowedClasses = new Set(
-        (teacherAssignment?.targetClasses || []).map(String),
+        (teacherAssignment?.targetClasses || []).map((c) =>
+          String(c).trim().toLowerCase()
+        )
       );
 
-      if (!allowedClasses.has(String(classInfo))) {
+      if (!allowedClasses.has(classInfo)) {
         return res.status(403).json({
           success: false,
           message: "Class not assigned to you",
@@ -152,72 +187,65 @@ router.get("/session", authMiddleWare, async (req, res) => {
       }
     }
 
-    // Convert incoming date string (YYYY-MM-DD) to Date object for comparison
-    const dateObj = new Date(date);
-    dateObj.setHours(0, 0, 0, 0);
-    const endOfDateObj = new Date(date);
-    endOfDateObj.setHours(23, 59, 59, 999);
-
-    console.log("DATE CHECK:", {
-      received: date,
-      dateObj,
-      endOfDateObj,
-    });
-    const alreadyExists = await Attendance.findOne({
-  course: courseId,
-  classInfo,
-  date: {
-    $gte: dateObj,
-    $lte: endOfDateObj,
-  },
-});
-    if (alreadyExists && fetchedBy === "teacher") {
-      return res.status(400).json({
-        success: false,
-        message: "Attendance session already exists for this course, class and date",
-      }) ;
-    }
-
-    // 1. Get registrations
+    // =========================
+    // GET REGISTRATIONS
+    // =========================
     const registrations = await Registration.find({
       classInfo,
-      aboutCourse: { $elemMatch: { course: courseId } },
+      aboutCourse: {
+        $elemMatch: {
+          course: courseId,
+        },
+      },
     }).populate("student");
 
-    const registrationMap = new Map();
     const registrationIds = [];
 
     registrations.forEach((r) => {
       if (r.student) {
-        registrationMap.set(String(r._id), r);
         registrationIds.push(r._id);
       }
     });
 
-    // 2. Get TODAY attendance with date range matching (Date objects)
+    console.log("REGISTRATIONS:", registrations.length);
+
+    // =========================
+    // GET TODAY ATTENDANCE
+    // =========================
     const attendanceDocs = await Attendance.find({
       course: courseId,
       classInfo,
-      date: { $gte: dateObj, $lte: endOfDateObj },
-      registration: { $in: registrationIds },
+      registration: {
+        $in: registrationIds,
+      },
+      date: {
+        $gte: startDate,
+        $lte: endDate,
+      },
     });
-    if(attendanceDocs.length > 0 && fetchedBy === "teacherForMarkAttendance"){
+
+    console.log("ATTENDANCE FOUND:", attendanceDocs.length);
+
+    // =========================
+    // PREVENT DUPLICATE SESSION
+    // =========================
+    const hasAttendanceToday = attendanceDocs.length > 0;
+
+    if (
+      hasAttendanceToday &&
+      (fetchedBy === "teacher" ||
+        fetchedBy === "teacherForMarkAttendance")
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Attendance session already exists for this course, class and date",
-      }) ;
+        message:
+          "Attendance session already exists for this course, class and date",
+      });
     }
 
-    // DEBUG: Log the query and results
-    console.log("Attendance Query:", {
-      courseId,
-      date,
-      classInfo,
-      registrationIds: registrationIds.length,
-      attendanceFound: attendanceDocs.length,
-    });
-
-    // 3. Map by REGISTRATION (NOT student)
+    // =========================
+    // MAP TODAY ATTENDANCE
+    // =========================
     const attendanceMap = new Map();
 
     attendanceDocs.forEach((item) => {
@@ -227,41 +255,62 @@ router.get("/session", authMiddleWare, async (req, res) => {
       });
     });
 
-    // 4. Get session topic safely
-    const sessionTopic = attendanceDocs[0]?.topic || "";
+    // =========================
+    // SESSION TOPIC
+    // =========================
+    const sessionTopic =
+      attendanceDocs.length > 0
+        ? attendanceDocs[0].topic
+        : "";
 
-    // 5. Get full attendance history for percentage
+    // =========================
+    // FULL ATTENDANCE HISTORY
+    // =========================
     const allAttendanceDocs = await Attendance.find({
       course: courseId,
-      registration: { $in: registrationIds },
+      registration: {
+        $in: registrationIds,
+      },
     }).select("registration status");
 
     const statsMap = new Map();
 
     allAttendanceDocs.forEach((item) => {
-      const id = String(item.registration);
+      const regId = String(item.registration);
 
-      if (!statsMap.has(id)) {
-        statsMap.set(id, { total: 0, present: 0 });
+      if (!statsMap.has(regId)) {
+        statsMap.set(regId, {
+          total: 0,
+          present: 0,
+        });
       }
 
-      const stats = statsMap.get(id);
-      stats.total++;
+      const stats = statsMap.get(regId);
+
+      stats.total += 1;
 
       if (item.status === "present") {
-        stats.present++;
+        stats.present += 1;
       }
     });
 
-    // 6. FINAL RESPONSE
+    // =========================
+    // FINAL STUDENTS RESPONSE
+    // =========================
     const students = registrations
       .map((r) => {
         const student = r.student;
 
         if (!student) return null;
 
-        const attendance = attendanceMap.get(String(r._id)) || {};
-        const stats = statsMap.get(String(r._id)) || { total: 0, present: 0 };
+        const attendance =
+          attendanceMap.get(String(r._id)) || {};
+
+        const stats =
+          statsMap.get(String(r._id)) || {
+            total: 0,
+            present: 0,
+          };
 
         return {
           _id: student._id,
@@ -273,28 +322,35 @@ router.get("/session", authMiddleWare, async (req, res) => {
           fatherName: student.fatherName,
           fatherContact: student.fatherContact,
 
-          // TODAY attendance
+          // TODAY ATTENDANCE
           status: attendance.status || "",
 
-          // percentage
-          percentage: stats.total
-            ? Math.round((stats.present / stats.total) * 100)
-            : 0,
+          // ATTENDANCE %
+          percentage:
+            stats.total > 0
+              ? Math.round(
+                  (stats.present / stats.total) * 100
+                )
+              : 0,
         };
       })
       .filter(Boolean);
 
-    return res.json({
+    // =========================
+    // RESPONSE
+    // =========================
+    return res.status(200).json({
       success: true,
       students,
       course,
       topic: sessionTopic,
       date,
       totalStudents: students.length,
-      hasAttendanceToday: attendanceDocs.length > 0,
+      hasAttendanceToday,
     });
   } catch (error) {
-    console.error(error);
+    console.error("SESSION API ERROR:", error);
+
     return res.status(500).json({
       success: false,
       message: "Server error",
