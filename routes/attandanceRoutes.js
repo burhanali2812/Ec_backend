@@ -108,9 +108,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
       });
     }
 
-    // =========================
-    // NORMALIZE INPUT
-    // =========================
+    
     classInfo = String(classInfo).trim();
 
     const dateObj = new Date(`${date}T00:00:00.000Z`);
@@ -121,9 +119,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
     const end = new Date(dateObj);
     end.setUTCHours(23, 59, 59, 999);
 
-    // =========================
-    // COURSE CHECK
-    // =========================
+
     const course = await Course.findById(courseId);
 
     if (!course) {
@@ -160,9 +156,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
       }
     }
 
-    // =========================
-    // REGISTRATIONS
-    // =========================
+  
     const registrations = await Registration.find({
       classInfo,
       aboutCourse: {
@@ -174,9 +168,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
       .filter((r) => r.student)
       .map((r) => r._id);
 
-    // =========================
-    // ATTENDANCE FOR TODAY (FIXED)
-    // =========================
+    
     const attendanceDocs = await Attendance.find({
       course: courseId,
    
@@ -201,9 +193,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
       });
     }
 
-    // =========================
-    // MAP TODAY ATTENDANCE
-    // =========================
+   
     const attendanceMap = new Map();
 
     attendanceDocs.forEach((item) => {
@@ -215,9 +205,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
 
     const sessionTopic = attendanceDocs[0]?.topic || "";
 
-    // =========================
-    // FULL HISTORY (PERCENTAGE)
-    // =========================
+ 
     const allAttendanceDocs = await Attendance.find({
       course: courseId,
       registration: { $in: registrationIds },
@@ -241,9 +229,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
       }
     });
 
-    // =========================
-    // FINAL RESPONSE
-    // =========================
+  
     const students = registrations
       .map((r) => {
         const student = r.student;
@@ -761,7 +747,10 @@ router.get("/getStudentAttendance", authMiddleWare, async (req, res) => {
         email: record.registration?.student?.email || "",
         contact: record.registration?.student?.contact || "",
 
-        courseName: record.course?.title || "N/A",
+       course: {
+  _id: record.course?._id,
+  title: record.course?.title || "N/A"
+},
 
         // UTC SAFE DATE
         date: d.toISOString().split("T")[0],
