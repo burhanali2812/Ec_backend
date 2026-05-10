@@ -12,17 +12,7 @@ const findTeacherAssignment = (course, teacherId) => {
   );
 };
 
-const startOfDay = (dateValue) => {
-  const d = new Date(dateValue);
-  d.setHours(0, 0, 0, 0);
-  return d;
-};
 
-const endOfDay = (dateValue) => {
-  const d = new Date(dateValue);
-  d.setHours(23, 59, 59, 999);
-  return d;
-};
 
 router.get("/myCourses", authMiddleWare, async (req, res) => {
   try {
@@ -111,9 +101,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
   try {
     let { courseId, classInfo, date, fetchedBy } = req.query;
 
-    // =========================
-    // VALIDATION
-    // =========================
+
     if (!courseId || !classInfo || !date) {
       return res.status(400).json({
         success: false,
@@ -121,27 +109,11 @@ router.get("/session", authMiddleWare, async (req, res) => {
       });
     }
 
-    // Normalize class name
+
     classInfo = String(classInfo).trim().toLowerCase();
 
-    // =========================
-    // DATE RANGE
-    // =========================
-    const startDate = new Date(date);
-    startDate.setHours(0, 0, 0, 0);
+ const dateObj = new Date(`${date}T00:00:00.000Z`);
 
-    const endDate = new Date(date);
-    endDate.setHours(23, 59, 59, 999);
-
-    console.log("DATE CHECK:", {
-      received: date,
-      startDate,
-      endDate,
-    });
-
-    // =========================
-    // COURSE CHECK
-    // =========================
     const course = await Course.findById(courseId);
 
     if (!course) {
@@ -151,9 +123,6 @@ router.get("/session", authMiddleWare, async (req, res) => {
       });
     }
 
-    // =========================
-    // TEACHER VALIDATION
-    // =========================
     const teacherId = String(req.user.id);
 
     const teacherAssignment = findTeacherAssignment(
@@ -168,9 +137,6 @@ router.get("/session", authMiddleWare, async (req, res) => {
       });
     }
 
-    // =========================
-    // CLASS ACCESS CHECK
-    // =========================
     if (req.user.role !== "admin") {
       const allowedClasses = new Set(
         (teacherAssignment?.targetClasses || []).map((c) =>
@@ -187,9 +153,6 @@ router.get("/session", authMiddleWare, async (req, res) => {
       }
     }
 
-    // =========================
-    // GET REGISTRATIONS
-    // =========================
     const registrations = await Registration.find({
       classInfo,
       aboutCourse: {
@@ -209,26 +172,17 @@ router.get("/session", authMiddleWare, async (req, res) => {
 
     console.log("REGISTRATIONS:", registrations.length);
 
-    // =========================
-    // GET TODAY ATTENDANCE
-    // =========================
     const attendanceDocs = await Attendance.find({
       course: courseId,
       classInfo,
       registration: {
         $in: registrationIds,
       },
-      date: {
-        $gte: startDate,
-        $lte: endDate,
-      },
+       date: dateObj,
     });
 
     console.log("ATTENDANCE FOUND:", attendanceDocs.length);
 
-    // =========================
-    // PREVENT DUPLICATE SESSION
-    // =========================
     const hasAttendanceToday = attendanceDocs.length > 0;
 
     if (
@@ -243,9 +197,6 @@ router.get("/session", authMiddleWare, async (req, res) => {
       });
     }
 
-    // =========================
-    // MAP TODAY ATTENDANCE
-    // =========================
     const attendanceMap = new Map();
 
     attendanceDocs.forEach((item) => {
@@ -255,17 +206,12 @@ router.get("/session", authMiddleWare, async (req, res) => {
       });
     });
 
-    // =========================
-    // SESSION TOPIC
-    // =========================
+ 
     const sessionTopic =
       attendanceDocs.length > 0
         ? attendanceDocs[0].topic
         : "";
 
-    // =========================
-    // FULL ATTENDANCE HISTORY
-    // =========================
     const allAttendanceDocs = await Attendance.find({
       course: courseId,
       registration: {
@@ -294,9 +240,6 @@ router.get("/session", authMiddleWare, async (req, res) => {
       }
     });
 
-    // =========================
-    // FINAL STUDENTS RESPONSE
-    // =========================
     const students = registrations
       .map((r) => {
         const student = r.student;
@@ -322,10 +265,9 @@ router.get("/session", authMiddleWare, async (req, res) => {
           fatherName: student.fatherName,
           fatherContact: student.fatherContact,
 
-          // TODAY ATTENDANCE
+   
           status: attendance.status || "",
 
-          // ATTENDANCE %
           percentage:
             stats.total > 0
               ? Math.round(
@@ -335,10 +277,6 @@ router.get("/session", authMiddleWare, async (req, res) => {
         };
       })
       .filter(Boolean);
-
-    // =========================
-    // RESPONSE
-    // =========================
     return res.status(200).json({
       success: true,
       students,
@@ -496,46 +434,59 @@ router.get("/studentStats/:courseId", authMiddleWare, async (req, res) => {
 
     const total = attendanceDocs.length;
     const present = attendanceDocs.filter(
-      (doc) => doc.status === "present",
+      (doc) => doc.status === "present"
     ).length;
+
     const absent = total - present;
     const percentage = total > 0 ? Math.round((present / total) * 100) : 0;
 
-    // Get recent 30 attendance records
+
     const recentAttendance = attendanceDocs
       .slice(0, 30)
       .reverse()
-      .map((doc) => ({
-        date: new Date(doc.date).toLocaleDateString("en-GB"),
-        status: doc.status,
-        topic: doc.topic || "",
-      }));
+      .map((doc) => {
+        const d = new Date(doc.date);
+
+        return {
+          date: d.toISOString().split("T")[0], // UTC date only
+          status: doc.status,
+          topic: doc.topic || "",
+        };
+      });
 
     const monthlyData = {};
     const monthlyHistoryMap = {};
+
     attendanceDocs.forEach((doc) => {
-      const dateObj = new Date(doc.date);
-      const month = dateObj.toLocaleString("default", {
+      const d = new Date(doc.date);
+
+      const year = d.getUTCFullYear();
+      const monthIndex = d.getUTCMonth();
+      const day = d.getUTCDate();
+
+      const monthKey = `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
+
+      const month = d.toLocaleString("en-US", {
         month: "short",
+        timeZone: "UTC",
       });
-      const monthLabel = dateObj.toLocaleString("default", {
+
+      const monthLabel = d.toLocaleString("en-US", {
         month: "long",
         year: "numeric",
+        timeZone: "UTC",
       });
-      const monthKey = `${dateObj.getFullYear()}-${String(
-        dateObj.getMonth() + 1,
-      ).padStart(2, "0")}`;
 
       if (!monthlyHistoryMap[monthKey]) {
         monthlyHistoryMap[monthKey] = [];
       }
 
       monthlyHistoryMap[monthKey].push({
-        rawDate: dateObj.toISOString(),
-        date: dateObj.toLocaleDateString("en-GB"),
+        rawDate: d.toISOString(),
+        date: d.toISOString().split("T")[0],
         status: doc.status,
         topic: doc.topic || "",
-        dayLabel: dateObj.toLocaleDateString("en-GB", { day: "2-digit" }),
+        dayLabel: String(day).padStart(2, "0"),
       });
 
       if (!monthlyData[monthKey]) {
@@ -544,10 +495,11 @@ router.get("/studentStats/:courseId", authMiddleWare, async (req, res) => {
           monthLabel,
           present: 0,
           absent: 0,
-          year: dateObj.getFullYear(),
-          monthNumber: dateObj.getMonth() + 1,
+          year,
+          monthNumber: monthIndex + 1,
         };
       }
+
       if (doc.status === "present") {
         monthlyData[monthKey].present += 1;
       } else {
@@ -555,25 +507,17 @@ router.get("/studentStats/:courseId", authMiddleWare, async (req, res) => {
       }
     });
 
+
     const monthlyDetails = Object.entries(monthlyData)
-      .sort(([a], [b]) => String(b).localeCompare(String(a)))
+      .sort(([a], [b]) => b.localeCompare(a))
       .map(([, data]) => ({
-        month: data.month,
-        monthLabel: data.monthLabel,
-        present: data.present,
-        absent: data.absent,
+        ...data,
         total: data.present + data.absent,
-        year: data.year,
-        monthNumber: data.monthNumber,
         history:
           monthlyHistoryMap[
             `${data.year}-${String(data.monthNumber).padStart(2, "0")}`
           ]
-            ?.slice()
-            .sort(
-              (a, b) =>
-                new Date(a.rawDate).getTime() - new Date(b.rawDate).getTime(),
-            )
+            ?.sort((a, b) => a.rawDate.localeCompare(b.rawDate))
             .map(({ rawDate, ...rest }) => rest) || [],
       }));
 
@@ -596,7 +540,11 @@ router.get("/studentStats/:courseId", authMiddleWare, async (req, res) => {
       recentAttendance,
     });
   } catch (error) {
-    return res.status(500).json({ success: false, message: "Server error" });
+    console.error(error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
   }
 });
 
@@ -612,6 +560,7 @@ router.get(
           success: false,
         });
       }
+
       const { className } = req.params;
       const { startDate, endDate, course } = req.query;
 
@@ -622,43 +571,50 @@ router.get(
         });
       }
 
-      // Build date filter
+   
       let dateFilter = {};
+
       if (startDate || endDate) {
         dateFilter.date = {};
+
         if (startDate) {
-          dateFilter.date.$gte = new Date(startDate);
-          dateFilter.date.$gte.setHours(0, 0, 0, 0);
+          const start = new Date(`${startDate}T00:00:00.000Z`);
+          dateFilter.date.$gte = start;
         }
+
         if (endDate) {
-          dateFilter.date.$lte = new Date(endDate);
-          dateFilter.date.$lte.setHours(23, 59, 59, 999);
+          const end = new Date(`${endDate}T23:59:59.999Z`);
+          dateFilter.date.$lte = end;
         }
       }
 
-      // Get all students in this class
+   
       const Student = require("../modals/Student");
-      const students = await Student.find({ classInfo: className });
+
+      const students = await Student.find({
+        classInfo: className,
+      });
+
       const studentIds = students.map((s) => s._id);
 
-      // Get registrations for these students
+    
       const registrations = await Registration.find({
         student: { $in: studentIds },
       });
+
       const registrationIds = registrations.map((r) => r._id);
 
-      // Build attendance filter
+    
       let attendanceFilter = {
         registration: { $in: registrationIds },
         ...dateFilter,
       };
 
-      // Add course filter if specified
       if (course && course !== "all") {
         attendanceFilter.course = course;
       }
 
-      // Fetch attendance records with populated data
+ 
       const attendanceRecords = await Attendance.find(attendanceFilter)
         .populate({
           path: "registration",
@@ -671,18 +627,26 @@ router.get(
         .populate("course", "title")
         .sort({ date: -1 });
 
-      // Format the response data
-      const formattedAttendance = attendanceRecords.map((record) => ({
-        _id: record._id,
-        studentName: record.registration?.student?.name || "N/A",
-        rollNumber: record.registration?.student?.rollNumber || "N/A",
-        courseName: record.course?.title || "N/A",
-        date: record.date,
-        status: record.status,
-        notes: record.topic || "",
-      }));
 
-      res.status(200).json({
+      const formattedAttendance = attendanceRecords.map((record) => {
+        const d = new Date(record.date);
+
+        return {
+          _id: record._id,
+          studentName: record.registration?.student?.name || "N/A",
+          rollNumber:
+            record.registration?.student?.rollNumber || "N/A",
+          courseName: record.course?.title || "N/A",
+
+          // UTC SAFE DATE
+          date: d.toISOString().split("T")[0],
+
+          status: record.status,
+          notes: record.topic || "",
+        };
+      });
+
+      return res.status(200).json({
         message: "Attendance records fetched successfully",
         success: true,
         attendance: formattedAttendance,
@@ -690,13 +654,14 @@ router.get(
       });
     } catch (error) {
       console.error("Error fetching attendance:", error);
+
       return res.status(500).json({
         message: "Error fetching attendance records",
         success: false,
         error: error.message,
       });
     }
-  },
+  }
 );
 
 // Get student attendance by student ID
@@ -718,13 +683,14 @@ router.get("/getStudentAttendance", authMiddleWare, async (req, res) => {
       });
     }
 
-    // Get all registrations for this student
+    // =========================
+    // REGISTRATIONS
+    // =========================
     const registrations = await Registration.find({
       student: studentId,
     });
+
     const registrationIds = registrations.map((r) => r._id);
-    console.log("Registrations found:", registrations.length);
-    console.log("Registration IDs:", registrationIds);
 
     if (registrationIds.length === 0) {
       return res.status(200).json({
@@ -734,34 +700,39 @@ router.get("/getStudentAttendance", authMiddleWare, async (req, res) => {
       });
     }
 
-    // Build query filter - convert date strings to Date objects
+    // =========================
+    // UTC DATE FILTER
+    // =========================
     let queryFilter = {
       registration: { $in: registrationIds },
     };
 
-    // Handle date range with Date objects
     if (startDate || endDate) {
       queryFilter.date = {};
+
       if (startDate) {
-        const startDateObj = new Date(startDate);
-        startDateObj.setHours(0, 0, 0, 0);
-        queryFilter.date.$gte = startDateObj;
+        queryFilter.date.$gte = new Date(
+          `${startDate}T00:00:00.000Z`
+        );
       }
+
       if (endDate) {
-        const endDateObj = new Date(endDate);
-        endDateObj.setHours(23, 59, 59, 999);
-        queryFilter.date.$lte = endDateObj;
+        queryFilter.date.$lte = new Date(
+          `${endDate}T23:59:59.999Z`
+        );
       }
     }
 
-    console.log("Fetching attendance for student:", {
+    console.log("Fetching student attendance:", {
       studentId,
       startDate,
       endDate,
       queryFilter,
     });
 
-    // Fetch attendance records WITH date filter
+    // =========================
+    // FETCH ATTENDANCE
+    // =========================
     const attendanceRecords = await Attendance.find(queryFilter)
       .populate("course", "title")
       .populate({
@@ -774,19 +745,41 @@ router.get("/getStudentAttendance", authMiddleWare, async (req, res) => {
       })
       .sort({ date: -1 });
 
-    console.log(
-      "Attendance records found (with filter):",
-      attendanceRecords.length,
-    );
+    // =========================
+    // FORMAT (UTC SAFE)
+    // =========================
+    const formattedAttendance = attendanceRecords.map((record) => {
+      const d = new Date(record.date);
 
-    res.status(200).json({
+      return {
+        _id: record._id,
+        studentName: record.registration?.student?.name || "N/A",
+        rollNumber:
+          record.registration?.student?.rollNumber || "N/A",
+        classInfo:
+          record.registration?.student?.classInfo || "N/A",
+        email: record.registration?.student?.email || "",
+        contact: record.registration?.student?.contact || "",
+
+        courseName: record.course?.title || "N/A",
+
+        // UTC SAFE DATE
+        date: d.toISOString().split("T")[0],
+
+        status: record.status,
+        topic: record.topic || "",
+      };
+    });
+
+    return res.status(200).json({
       message: "Student attendance records fetched successfully",
       success: true,
-      attendance: attendanceRecords,
-      count: attendanceRecords.length,
+      attendance: formattedAttendance,
+      count: formattedAttendance.length,
     });
   } catch (error) {
     console.error("Error fetching student attendance:", error);
+
     return res.status(500).json({
       message: "Error fetching student attendance records",
       success: false,
@@ -837,13 +830,15 @@ router.post(
     try {
       if (req.user.role !== "admin") {
         return res.status(403).json({
-          message: "Unauthorized, Only admins can update attendance records",
+          message:
+            "Unauthorized, Only admins can update attendance records",
           success: false,
         });
       }
 
       const { attendanceId } = req.params;
       const { status } = req.body;
+
       if (!["present", "absent"].includes(status)) {
         return res.status(400).json({
           message: "Invalid status value",
@@ -852,16 +847,22 @@ router.post(
       }
 
       const attendanceRecord = await Attendance.findById(attendanceId);
+
       if (!attendanceRecord) {
         return res.status(404).json({
           message: "Attendance record not found",
           success: false,
         });
       }
-      // disallow admin to change the ststuas id date is 72 hours old from the current date
-      const now = new Date();
-      const recordDate = new Date(attendanceRecord.date);
-      const hoursDifference = (now - recordDate) / (1000 * 60 * 60);
+
+      // =========================
+      // UTC SAFE TIME CHECK
+      // =========================
+      const nowUTC = Date.now();
+      const recordUTC = new Date(attendanceRecord.date).getTime();
+
+      const hoursDifference =
+        (nowUTC - recordUTC) / (1000 * 60 * 60);
 
       if (hoursDifference > 72) {
         return res.status(400).json({
@@ -871,24 +872,35 @@ router.post(
         });
       }
 
-      const updatedPercentage = await Attendance.countDocuments({
+      // =========================
+      // RECALCULATE PERCENTAGE
+      // =========================
+      const totalRecords = await Attendance.countDocuments({
         registration: attendanceRecord.registration,
         course: attendanceRecord.course,
       });
-      const updatedPresent = await Attendance.countDocuments({
+
+      const presentRecords = await Attendance.countDocuments({
         registration: attendanceRecord.registration,
         course: attendanceRecord.course,
         status: "present",
       });
+
       const percentage =
-        updatedPercentage > 0 ? (updatedPresent / updatedPercentage) * 100 : 0;
+        totalRecords > 0
+          ? (presentRecords / totalRecords) * 100
+          : 0;
+
+      // =========================
+      // UPDATE RECORD
+      // =========================
       const updated = await Attendance.findByIdAndUpdate(
         attendanceId,
         {
           status,
           percentage,
         },
-        { new: true },
+        { new: true }
       );
 
       if (!updated) {
@@ -898,87 +910,94 @@ router.post(
         });
       }
 
+      
+      const d = new Date(updated.date);
+
       return res.status(200).json({
         message: "Attendance record updated successfully",
         success: true,
-        attendance: updated,
+        attendance: {
+          ...updated.toObject(),
+          date: d.toISOString().split("T")[0],
+        },
       });
     } catch (error) {
       console.error("Error updating attendance record:", error);
+
       return res.status(500).json({
         message: "Error updating attendance record",
         success: false,
         error: error.message,
       });
     }
-  },
+  }
 );
 
 
-router.put("/fix-attendance-dates", async (req, res) => {
-  try {
-    const records = await Attendance.find();
+// router.put("/fix-attendance-dates", async (req, res) => {
+//   try {
+//     const records = await Attendance.find();
 
-    let updatedCount = 0;
-    let deletedDuplicates = 0;
+//     let updatedCount = 0;
+//     let deletedDuplicates = 0;
 
-    for (const record of records) {
-      const oldDate = new Date(record.date);
+//     for (const record of records) {
+//       const oldDate = new Date(record.date);
 
-      // Add 1 day
-      oldDate.setDate(oldDate.getDate() + 1);
+//       // Add 1 day
+//       oldDate.setDate(oldDate.getDate() + 1);
 
-      // Normalize UTC midnight
-      const correctedDate = new Date(
-        `${oldDate.toISOString().split("T")[0]}T00:00:00.000Z`
-      );
+//       // Normalize UTC midnight
+//       const correctedDate = new Date(
+//         `${oldDate.toISOString().split("T")[0]}T00:00:00.000Z`
+//       );
 
-      // Check if corrected record already exists
-      const existing = await Attendance.findOne({
-        _id: { $ne: record._id },
-        registration: record.registration,
-        course: record.course,
-        date: correctedDate,
-      });
+//       // Check if corrected record already exists
+//       const existing = await Attendance.findOne({
+//         _id: { $ne: record._id },
+//         registration: record.registration,
+//         course: record.course,
+//         date: correctedDate,
+//       });
 
-      if (existing) {
-        // Duplicate would happen -> delete old wrong record
-        await Attendance.findByIdAndDelete(record._id);
+//       if (existing) {
+//         // Duplicate would happen -> delete old wrong record
+//         await Attendance.findByIdAndDelete(record._id);
 
-        deletedDuplicates++;
+//         deletedDuplicates++;
 
-        console.log(
-          `Deleted duplicate record: ${record._id}`
-        );
-      } else {
-        // Safe to update
-        record.date = correctedDate;
+//         console.log(
+//           `Deleted duplicate record: ${record._id}`
+//         );
+//       } else {
+//         // Safe to update
+//         record.date = correctedDate;
 
-        await record.save();
+//         await record.save();
 
-        updatedCount++;
+//         updatedCount++;
 
-        console.log(
-          `Updated: ${record._id}`
-        );
-      }
-    }
+//         console.log(
+//           `Updated: ${record._id}`
+//         );
+//       }
+//     }
 
-    return res.status(200).json({
-      success: true,
-      message: "Attendance dates fixed successfully",
-      updatedCount,
-      deletedDuplicates,
-    });
-  } catch (error) {
-    console.error("FIX DATE ERROR:", error);
+//     return res.status(200).json({
+//       success: true,
+//       message: "Attendance dates fixed successfully",
+//       updatedCount,
+//       deletedDuplicates,
+//     });
+//   } catch (error) {
+//     console.error("FIX DATE ERROR:", error);
 
-    return res.status(500).json({
-      success: false,
-      message: "Server error",
-      error: error.message,
-    });
-  }
-});
+//     return res.status(500).json({
+//       success: false,
+//       message: "Server error",
+//       error: error.message,
+//     });
+//   }
+// });
 
 module.exports = router;
