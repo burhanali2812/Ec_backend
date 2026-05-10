@@ -651,6 +651,7 @@ router.get(
 );
 
 // Get student attendance by student ID
+
 router.get("/getStudentAttendance", authMiddleWare, async (req, res) => {
   try {
     if (req.user.role !== "admin") {
@@ -669,14 +670,13 @@ router.get("/getStudentAttendance", authMiddleWare, async (req, res) => {
       });
     }
 
-    // =========================
-    // REGISTRATIONS
-    // =========================
+    // Get all registrations for this student
     const registrations = await Registration.find({
       student: studentId,
     });
-
     const registrationIds = registrations.map((r) => r._id);
+    console.log("Registrations found:", registrations.length);
+    console.log("Registration IDs:", registrationIds);
 
     if (registrationIds.length === 0) {
       return res.status(200).json({
@@ -686,39 +686,34 @@ router.get("/getStudentAttendance", authMiddleWare, async (req, res) => {
       });
     }
 
-    // =========================
-    // UTC DATE FILTER
-    // =========================
+    // Build query filter - convert date strings to Date objects
     let queryFilter = {
       registration: { $in: registrationIds },
     };
 
+    // Handle date range with Date objects
     if (startDate || endDate) {
       queryFilter.date = {};
-
       if (startDate) {
-        queryFilter.date.$gte = new Date(
-          `${startDate}T00:00:00.000Z`
-        );
+        const startDateObj = new Date(startDate);
+        startDateObj.setHours(0, 0, 0, 0);
+        queryFilter.date.$gte = startDateObj;
       }
-
       if (endDate) {
-        queryFilter.date.$lte = new Date(
-          `${endDate}T23:59:59.999Z`
-        );
+        const endDateObj = new Date(endDate);
+        endDateObj.setHours(23, 59, 59, 999);
+        queryFilter.date.$lte = endDateObj;
       }
     }
 
-    console.log("Fetching student attendance:", {
+    console.log("Fetching attendance for student:", {
       studentId,
       startDate,
       endDate,
       queryFilter,
     });
 
-    // =========================
-    // FETCH ATTENDANCE
-    // =========================
+    // Fetch attendance records WITH date filter
     const attendanceRecords = await Attendance.find(queryFilter)
       .populate("course", "title")
       .populate({
@@ -731,44 +726,19 @@ router.get("/getStudentAttendance", authMiddleWare, async (req, res) => {
       })
       .sort({ date: -1 });
 
-    // =========================
-    // FORMAT (UTC SAFE)
-    // =========================
-    const formattedAttendance = attendanceRecords.map((record) => {
-      const d = new Date(record.date);
+    console.log(
+      "Attendance records found (with filter):",
+      attendanceRecords.length,
+    );
 
-      return {
-        _id: record._id,
-        studentName: record.registration?.student?.name || "N/A",
-        rollNumber:
-          record.registration?.student?.rollNumber || "N/A",
-        classInfo:
-          record.registration?.student?.classInfo || "N/A",
-        email: record.registration?.student?.email || "",
-        contact: record.registration?.student?.contact || "",
-
-       course: {
-  _id: record.course?._id,
-  title: record.course?.title || "N/A"
-},
-
-        // UTC SAFE DATE
-        date: d.toISOString().split("T")[0],
-
-        status: record.status,
-        topic: record.topic || "",
-      };
-    });
-
-    return res.status(200).json({
+    res.status(200).json({
       message: "Student attendance records fetched successfully",
       success: true,
-      attendance: formattedAttendance,
-      count: formattedAttendance.length,
+      attendance: attendanceRecords,
+      count: attendanceRecords.length,
     });
   } catch (error) {
     console.error("Error fetching student attendance:", error);
-
     return res.status(500).json({
       message: "Error fetching student attendance records",
       success: false,
