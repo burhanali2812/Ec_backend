@@ -101,7 +101,6 @@ router.get("/session", authMiddleWare, async (req, res) => {
   try {
     let { courseId, classInfo, date, fetchedBy } = req.query;
 
-
     if (!courseId || !classInfo || !date) {
       return res.status(400).json({
         success: false,
@@ -109,11 +108,22 @@ router.get("/session", authMiddleWare, async (req, res) => {
       });
     }
 
+    // =========================
+    // NORMALIZE INPUT
+    // =========================
+    classInfo = String(classInfo).trim();
 
-    classInfo = String(classInfo).trim().toLowerCase();
+    const dateObj = new Date(`${date}T00:00:00.000Z`);
 
- const dateObj = new Date(`${date}T00:00:00.000Z`);
+    const start = new Date(dateObj);
+    start.setUTCHours(0, 0, 0, 0);
 
+    const end = new Date(dateObj);
+    end.setUTCHours(23, 59, 59, 999);
+
+    // =========================
+    // COURSE CHECK
+    // =========================
     const course = await Course.findById(courseId);
 
     if (!course) {
@@ -125,10 +135,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
 
     const teacherId = String(req.user.id);
 
-    const teacherAssignment = findTeacherAssignment(
-      course,
-      teacherId
-    );
+    const teacherAssignment = findTeacherAssignment(course, teacherId);
 
     if (req.user.role !== "admin" && !teacherAssignment) {
       return res.status(403).json({
@@ -140,7 +147,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
     if (req.user.role !== "admin") {
       const allowedClasses = new Set(
         (teacherAssignment?.targetClasses || []).map((c) =>
-          String(c).trim().toLowerCase()
+          String(c).trim()
         )
       );
 
@@ -153,35 +160,32 @@ router.get("/session", authMiddleWare, async (req, res) => {
       }
     }
 
+    // =========================
+    // REGISTRATIONS
+    // =========================
     const registrations = await Registration.find({
       classInfo,
       aboutCourse: {
-        $elemMatch: {
-          course: courseId,
-        },
+        $elemMatch: { course: courseId },
       },
     }).populate("student");
 
-    const registrationIds = [];
+    const registrationIds = registrations
+      .filter((r) => r.student)
+      .map((r) => r._id);
 
-    registrations.forEach((r) => {
-      if (r.student) {
-        registrationIds.push(r._id);
-      }
-    });
-
-    console.log("REGISTRATIONS:", registrations.length);
-
+    // =========================
+    // ATTENDANCE FOR TODAY (FIXED)
+    // =========================
     const attendanceDocs = await Attendance.find({
       course: courseId,
       classInfo,
-      registration: {
-        $in: registrationIds,
+      registration: { $in: registrationIds },
+      date: {
+        $gte: start,
+        $lte: end,
       },
-       date: dateObj,
     });
-
-    console.log("ATTENDANCE FOUND:", attendanceDocs.length);
 
     const hasAttendanceToday = attendanceDocs.length > 0;
 
@@ -197,6 +201,9 @@ router.get("/session", authMiddleWare, async (req, res) => {
       });
     }
 
+    // =========================
+    // MAP TODAY ATTENDANCE
+    // =========================
     const attendanceMap = new Map();
 
     attendanceDocs.forEach((item) => {
@@ -206,17 +213,14 @@ router.get("/session", authMiddleWare, async (req, res) => {
       });
     });
 
- 
-    const sessionTopic =
-      attendanceDocs.length > 0
-        ? attendanceDocs[0].topic
-        : "";
+    const sessionTopic = attendanceDocs[0]?.topic || "";
 
+    // =========================
+    // FULL HISTORY (PERCENTAGE)
+    // =========================
     const allAttendanceDocs = await Attendance.find({
       course: courseId,
-      registration: {
-        $in: registrationIds,
-      },
+      registration: { $in: registrationIds },
     }).select("registration status");
 
     const statsMap = new Map();
@@ -225,10 +229,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
       const regId = String(item.registration);
 
       if (!statsMap.has(regId)) {
-        statsMap.set(regId, {
-          total: 0,
-          present: 0,
-        });
+        statsMap.set(regId, { total: 0, present: 0 });
       }
 
       const stats = statsMap.get(regId);
@@ -240,20 +241,19 @@ router.get("/session", authMiddleWare, async (req, res) => {
       }
     });
 
+    // =========================
+    // FINAL RESPONSE
+    // =========================
     const students = registrations
       .map((r) => {
         const student = r.student;
-
         if (!student) return null;
 
-        const attendance =
-          attendanceMap.get(String(r._id)) || {};
-
-        const stats =
-          statsMap.get(String(r._id)) || {
-            total: 0,
-            present: 0,
-          };
+        const attendance = attendanceMap.get(String(r._id)) || {};
+        const stats = statsMap.get(String(r._id)) || {
+          total: 0,
+          present: 0,
+        };
 
         return {
           _id: student._id,
@@ -265,18 +265,18 @@ router.get("/session", authMiddleWare, async (req, res) => {
           fatherName: student.fatherName,
           fatherContact: student.fatherContact,
 
-   
+          // TODAY STATUS (FIXED)
           status: attendance.status || "",
 
+          // PERCENTAGE
           percentage:
             stats.total > 0
-              ? Math.round(
-                  (stats.present / stats.total) * 100
-                )
+              ? Math.round((stats.present / stats.total) * 100)
               : 0,
         };
       })
       .filter(Boolean);
+
     return res.status(200).json({
       success: true,
       students,
