@@ -118,20 +118,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
       });
     }
 
-    const alreadyExists = await Attendance.findOne({
-      course: courseId,
-      classInfo,
-      date: {
-        $gte: startOfDay(date),
-        $lte: endOfDay(date),
-      },
-    });
-    if (alreadyExists && fetchedBy === "teacher") {
-      return res.status(400).json({
-        success: false,
-        message: "Attendance session already exists for this course, class and date",
-      }) ;
-    }
+
     const course = await Course.findById(courseId);
     if (!course) {
       return res.status(404).json({
@@ -176,6 +163,20 @@ router.get("/session", authMiddleWare, async (req, res) => {
       dateObj,
       endOfDateObj,
     });
+    const alreadyExists = await Attendance.findOne({
+  course: courseId,
+  classInfo,
+  date: {
+    $gte: dateObj,
+    $lte: endOfDateObj,
+  },
+});
+    if (alreadyExists && fetchedBy === "teacher") {
+      return res.status(400).json({
+        success: false,
+        message: "Attendance session already exists for this course, class and date",
+      }) ;
+    }
 
     // 1. Get registrations
     const registrations = await Registration.find({
@@ -290,7 +291,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
       topic: sessionTopic,
       date,
       totalStudents: students.length,
-      hasAttendanceToday: alreadyExists ? true : false,
+      hasAttendanceToday: attendanceDocs.length > 0,
     });
   } catch (error) {
     console.error(error);
