@@ -919,14 +919,8 @@ router.put("/fix-attendance-dates", async (req, res) => {
   try {
     const records = await Attendance.find();
 
-    if (!records.length) {
-      return res.status(404).json({
-        success: false,
-        message: "No attendance records found",
-      });
-    }
-
     let updatedCount = 0;
+    let deletedDuplicates = 0;
 
     for (const record of records) {
       const oldDate = new Date(record.date);
@@ -934,22 +928,47 @@ router.put("/fix-attendance-dates", async (req, res) => {
       // Add 1 day
       oldDate.setDate(oldDate.getDate() + 1);
 
-      // Normalize date to UTC midnight
+      // Normalize UTC midnight
       const correctedDate = new Date(
         `${oldDate.toISOString().split("T")[0]}T00:00:00.000Z`
       );
 
-      await Attendance.findByIdAndUpdate(record._id, {
+      // Check if corrected record already exists
+      const existing = await Attendance.findOne({
+        _id: { $ne: record._id },
+        registration: record.registration,
+        course: record.course,
         date: correctedDate,
       });
 
-      updatedCount++;
+      if (existing) {
+        // Duplicate would happen -> delete old wrong record
+        await Attendance.findByIdAndDelete(record._id);
+
+        deletedDuplicates++;
+
+        console.log(
+          `Deleted duplicate record: ${record._id}`
+        );
+      } else {
+        // Safe to update
+        record.date = correctedDate;
+
+        await record.save();
+
+        updatedCount++;
+
+        console.log(
+          `Updated: ${record._id}`
+        );
+      }
     }
 
     return res.status(200).json({
       success: true,
       message: "Attendance dates fixed successfully",
-      totalUpdated: updatedCount,
+      updatedCount,
+      deletedDuplicates,
     });
   } catch (error) {
     console.error("FIX DATE ERROR:", error);
