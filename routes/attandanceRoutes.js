@@ -303,8 +303,7 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
     ) {
       return res.status(400).json({
         success: false,
-        message:
-          "courseId, classInfo, date, topic and studentStatuses are required",
+        message: "courseId, classInfo, date, topic and studentStatuses are required",
       });
     }
 
@@ -337,8 +336,8 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
       });
     }
 
-    // Convert date string (YYYY-MM-DD) to Date object with start of day
- const dateObj = new Date(`${date}T00:00:00.000Z`);
+    // ✅ FIXED UTC DATE
+    const dateObj = new Date(`${date}T00:00:00.000Z`);
 
     const savedRecords = [];
 
@@ -376,6 +375,20 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
         },
         { upsert: true, new: true },
       );
+      const allRecords = await Attendance.find({
+        registration: registration._id,
+        course: courseId,
+      });
+
+      const total = allRecords.length;
+      const present = allRecords.filter(a => a.status === "present").length;
+
+      const percentage = total > 0
+        ? Math.round((present / total) * 100)
+        : 0;
+
+      saved.percentage = percentage;
+      await saved.save();
 
       savedRecords.push(saved);
     }
@@ -385,6 +398,7 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
       message: "Attendance saved successfully",
       records: savedRecords,
     });
+
   } catch (error) {
     console.error(error);
     return res.status(500).json({
@@ -814,9 +828,7 @@ router.post(
         });
       }
 
-      // =========================
-      // UTC SAFE TIME CHECK
-      // =========================
+     
       const nowUTC = Date.now();
       const recordUTC = new Date(attendanceRecord.date).getTime();
 
@@ -831,9 +843,7 @@ router.post(
         });
       }
 
-      // =========================
-      // RECALCULATE PERCENTAGE
-      // =========================
+
       const totalRecords = await Attendance.countDocuments({
         registration: attendanceRecord.registration,
         course: attendanceRecord.course,
@@ -850,9 +860,6 @@ router.post(
           ? (presentRecords / totalRecords) * 100
           : 0;
 
-      // =========================
-      // UPDATE RECORD
-      // =========================
       const updated = await Attendance.findByIdAndUpdate(
         attendanceId,
         {
