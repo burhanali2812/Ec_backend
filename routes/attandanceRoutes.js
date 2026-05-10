@@ -179,7 +179,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
     // =========================
     const attendanceDocs = await Attendance.find({
       course: courseId,
-      classInfo,
+   
       registration: { $in: registrationIds },
       date: {
         $gte: start,
