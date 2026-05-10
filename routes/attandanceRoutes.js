@@ -414,8 +414,7 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
     }
 
     // Convert date string (YYYY-MM-DD) to Date object with start of day
-    const dateObj = new Date(date);
-    dateObj.setHours(0, 0, 0, 0);
+ const dateObj = new Date(`${date}T00:00:00.000Z`);
 
     const savedRecords = [];
 
@@ -437,15 +436,13 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
         {
           registration: registration._id,
           course: courseId,
-          date: {
-            $gte: dateObj,
-            $lte: new Date(dateObj.getTime() + 86399999), // End of day
-          },
+          date: dateObj,
         },
         {
           $set: {
             registration: registration._id,
             course: courseId,
+            classInfo,
             date: dateObj,
             topic: String(topic).trim(),
             status,
@@ -916,5 +913,53 @@ router.post(
     }
   },
 );
+
+
+router.put("/fix-attendance-dates", async (req, res) => {
+  try {
+    const records = await Attendance.find();
+
+    if (!records.length) {
+      return res.status(404).json({
+        success: false,
+        message: "No attendance records found",
+      });
+    }
+
+    let updatedCount = 0;
+
+    for (const record of records) {
+      const oldDate = new Date(record.date);
+
+      // Add 1 day
+      oldDate.setDate(oldDate.getDate() + 1);
+
+      // Normalize date to UTC midnight
+      const correctedDate = new Date(
+        `${oldDate.toISOString().split("T")[0]}T00:00:00.000Z`
+      );
+
+      await Attendance.findByIdAndUpdate(record._id, {
+        date: correctedDate,
+      });
+
+      updatedCount++;
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Attendance dates fixed successfully",
+      totalUpdated: updatedCount,
+    });
+  } catch (error) {
+    console.error("FIX DATE ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    });
+  }
+});
 
 module.exports = router;
