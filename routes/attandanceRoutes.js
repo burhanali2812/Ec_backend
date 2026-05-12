@@ -183,7 +183,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
 
     if (
       hasAttendanceToday &&
-      (fetchedBy === "teacher" ||
+      (
         fetchedBy === "teacherForMarkAttendance")
     ) {
       return res.status(400).json({
