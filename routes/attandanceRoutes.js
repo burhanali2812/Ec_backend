@@ -668,9 +668,9 @@ router.get(
 
 router.get("/getStudentAttendance", authMiddleWare, async (req, res) => {
   try {
-    if (req.user.role !== "admin" ) {
+    if (req.user.role !== "admin" && req.user.role !== "teacher" ) {
       return res.status(403).json({
-        message: "Unauthorized, Only admins  can fetch student attendance",
+        message: "Unauthorized, Only admins and teachers can fetch student attendance",
         success: false,
       });
     }
