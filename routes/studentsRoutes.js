@@ -6,7 +6,9 @@ const Student = require("../modals/Student");
 const Registration = require("../modals/Registration");
 const authMiddleWare = require("../authMiddleWare");
 const StudentFee = require("../modals/StudentFee");
-const Counter = require("../modals/Counter"); // Import the counter model
+const Counter = require("../modals/Counter");
+const TeacherReview = require("../modals/TeacherReviews");
+ // Import the counter model
 
 router.post("/signUp", authMiddleWare, async (req, res) => {
   const {
@@ -803,7 +805,8 @@ router.post("/teacherReview", authMiddleWare, async (req, res) => {
     !behaviourRating ||
     !communicationRating ||
     !punctualityRating ||
-    !knowledgeRating
+    !knowledgeRating ||
+    !comment
   ) {
     return res.status(400).json({
       message: "Teacher ID and all ratings are required",
