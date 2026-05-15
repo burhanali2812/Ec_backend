@@ -788,31 +788,61 @@ router.get(
 );
 
 router.post("teacherReview", authMiddleWare, async (req, res) => {
-  const { teacherId, rating, comment } = req.body;
-  if (!teacherId || !rating) {
+  const { 
+    teacherId, 
+    teachingStyleRating, 
+    behaviourRating, 
+    communicationRating, 
+    punctualityRating, 
+    knowledgeRating, 
+    comment 
+  } = req.body;
+
+  // Validation
+  if (!teacherId || !teachingStyleRating || !behaviourRating || !communicationRating || !punctualityRating || !knowledgeRating) {
     return res.status(400).json({
-      message: "Teacher ID and rating are required",
+      message: "Teacher ID and all ratings are required",
       success: false,
     });
   }
+
+  // Validate rating ranges
+  const ratings = [teachingStyleRating, behaviourRating, communicationRating, punctualityRating, knowledgeRating];
+  if (ratings.some(rating => rating < 1 || rating > 5)) {
+    return res.status(400).json({
+      message: "All ratings must be between 1 and 5",
+      success: false,
+    });
+  }
+
   try { 
-       const existingReview = await TeacherReview.findOne({
+    // Check if student already reviewed this teacher
+    const existingReview = await TeacherReview.findOne({
       teacher: teacherId,
       student: req.user.id,
     });
+
     if (existingReview) {
       return res.status(400).json({
         message: "You have already reviewed this teacher",
         success: false,
       });
     }
+
+    // Create new review
     const review = new TeacherReview({
       teacher: teacherId,
       student: req.user.id,
-      rating,
+      teachingStyleRating,
+      behaviourRating,
+      communicationRating,
+      punctualityRating,
+      knowledgeRating,
       comment,
     });
+
     await review.save();
+
     res.status(201).json({
       message: "Review submitted successfully",
       success: true,

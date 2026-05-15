@@ -2,6 +2,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const Admin = require("../modals/Admin");
 const express = require("express");
+const authMiddleWare = require("../authMiddleWare");
 const router = express.Router();
 
 
@@ -43,6 +44,18 @@ router.post("/login", async(req,res)=>{
         res.json({ token , message: "Login successful", success: true});
     } catch (error) {
         res.status(500).json({ message: "Server error" });
+    }
+});
+
+router.get("/teacherReviews", authMiddleWare, async (req, res) => {
+    if (req.user.role !== "admin") {
+        return res.status(403).json({ success: false, message: "Access denied" });
+    }
+    try {
+      const reviews = await TeacherReview.find().populate("teacher", "name course");
+        res.json({ success: true, reviews });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Server error" });
     }
 });
 
