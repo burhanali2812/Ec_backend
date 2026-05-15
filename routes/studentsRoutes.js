@@ -836,12 +836,7 @@ router.post("/teacherReview", authMiddleWare, async (req, res) => {
       student: req.user.id,
     });
 
-    if (existingReview) {
-      return res.status(400).json({
-        message: "You have already reviewed this teacher",
-        success: false,
-      });
-    }
+ 
 
     // Create new review
     const review = new TeacherReview({
