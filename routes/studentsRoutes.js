@@ -131,7 +131,12 @@ router.post("/login", async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: "20d" },
     );
-    res.json({ token, success: true, message: "Login successful", studentId: student._id });
+    res.json({
+      token,
+      success: true,
+      message: "Login successful",
+      studentId: student._id,
+    });
   } catch (error) {
     res.status(500).json({ message: "Server error", success: false });
   }
@@ -575,12 +580,10 @@ router.get(
 router.post("/resetPassword", async (req, res) => {
   const { email, currentPassword, newPassword } = req.body;
   if (!email || !currentPassword || !newPassword) {
-    return res
-      .status(400)
-      .json({
-        message: "Email, current, and new password are required",
-        success: false,
-      });
+    return res.status(400).json({
+      message: "Email, current, and new password are required",
+      success: false,
+    });
   }
 
   try {
@@ -598,33 +601,27 @@ router.post("/resetPassword", async (req, res) => {
         .json({ message: "Current password is incorrect", success: false });
     }
     if (newPassword.length < 6) {
-      return res
-        .status(400)
-        .json({
-          message: "New password must be at least 6 characters long",
-          success: false,
-        });
+      return res.status(400).json({
+        message: "New password must be at least 6 characters long",
+        success: false,
+      });
     }
     if (currentPassword === newPassword) {
-      return res
-        .status(400)
-        .json({
-          message: "New password cannot be the same as current password",
-          success: false,
-        });
+      return res.status(400).json({
+        message: "New password cannot be the same as current password",
+        success: false,
+      });
     }
     if (
       !/[A-Z]/.test(newPassword) ||
       !/[a-z]/.test(newPassword) ||
       !/[0-9]/.test(newPassword)
     ) {
-      return res
-        .status(400)
-        .json({
-          message:
-            "New password must contain at least one uppercase letter, one lowercase letter, and one number",
-          success: false,
-        });
+      return res.status(400).json({
+        message:
+          "New password must contain at least one uppercase letter, one lowercase letter, and one number",
+        success: false,
+      });
     }
     const hashedNewPassword = await bcrypt.hash(newPassword, 10);
 
@@ -746,7 +743,8 @@ router.get(
     try {
       if (req.user.role !== "admin" && req.user.role !== "teacher") {
         return res.status(403).json({
-          message: "Unauthorized, Only admins and teachers can fetch student details",
+          message:
+            "Unauthorized, Only admins and teachers can fetch student details",
           success: false,
         });
       }
@@ -787,19 +785,26 @@ router.get(
   },
 );
 
-router.post("teacherReview", authMiddleWare, async (req, res) => {
-  const { 
-    teacherId, 
-    teachingStyleRating, 
-    behaviourRating, 
-    communicationRating, 
-    punctualityRating, 
-    knowledgeRating, 
-    comment 
+router.post("/teacherReview", authMiddleWare, async (req, res) => {
+  const {
+    teacherId,
+    teachingStyleRating,
+    behaviourRating,
+    communicationRating,
+    punctualityRating,
+    knowledgeRating,
+    comment,
   } = req.body;
 
   // Validation
-  if (!teacherId || !teachingStyleRating || !behaviourRating || !communicationRating || !punctualityRating || !knowledgeRating) {
+  if (
+    !teacherId ||
+    !teachingStyleRating ||
+    !behaviourRating ||
+    !communicationRating ||
+    !punctualityRating ||
+    !knowledgeRating
+  ) {
     return res.status(400).json({
       message: "Teacher ID and all ratings are required",
       success: false,
@@ -807,15 +812,21 @@ router.post("teacherReview", authMiddleWare, async (req, res) => {
   }
 
   // Validate rating ranges
-  const ratings = [teachingStyleRating, behaviourRating, communicationRating, punctualityRating, knowledgeRating];
-  if (ratings.some(rating => rating < 1 || rating > 5)) {
+  const ratings = [
+    teachingStyleRating,
+    behaviourRating,
+    communicationRating,
+    punctualityRating,
+    knowledgeRating,
+  ];
+  if (ratings.some((rating) => rating < 1 || rating > 5)) {
     return res.status(400).json({
       message: "All ratings must be between 1 and 5",
       success: false,
     });
   }
 
-  try { 
+  try {
     // Check if student already reviewed this teacher
     const existingReview = await TeacherReview.findOne({
       teacher: teacherId,
