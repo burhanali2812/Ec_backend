@@ -131,7 +131,7 @@ router.post("/login", async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: "20d" },
     );
-    res.json({ token, success: true, message: "Login successful" });
+    res.json({ token, success: true, message: "Login successful", studentId: student._id });
   } catch (error) {
     res.status(500).json({ message: "Server error", success: false });
   }
@@ -786,5 +786,41 @@ router.get(
     }
   },
 );
+
+router.post("teacherReview", authMiddleWare, async (req, res) => {
+  const { teacherId, rating, comment } = req.body;
+  if (!teacherId || !rating) {
+    return res.status(400).json({
+      message: "Teacher ID and rating are required",
+      success: false,
+    });
+  }
+  try { 
+       const existingReview = await TeacherReview.findOne({
+      teacher: teacherId,
+      student: req.user.id,
+    });
+    if (existingReview) {
+      return res.status(400).json({
+        message: "You have already reviewed this teacher",
+        success: false,
+      });
+    }
+    const review = new TeacherReview({
+      teacher: teacherId,
+      student: req.user.id,
+      rating,
+      comment,
+    });
+    await review.save();
+    res.status(201).json({
+      message: "Review submitted successfully",
+      success: true,
+      review,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message, success: false });
+  }
+});
 
 module.exports = router;
