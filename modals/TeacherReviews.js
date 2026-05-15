@@ -48,6 +48,10 @@ const teacherReviewSchema = new mongoose.Schema({
         min: 1,
         max: 5
     },
+    isSeenByAdmin:{
+        type: Boolean,
+        default: false
+    },
 
     comment: {
         type: String,

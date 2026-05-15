@@ -3,6 +3,7 @@ const jwt = require("jsonwebtoken");
 const Admin = require("../modals/Admin");
 const express = require("express");
 const authMiddleWare = require("../authMiddleWare");
+const TeacherReview = require("../modals/TeacherReviews");
 const router = express.Router();
 
 
@@ -47,13 +48,31 @@ router.post("/login", async(req,res)=>{
     }
 });
 
-router.get("/teacherReviews", authMiddleWare, async (req, res) => {
+router.get("/getTeacherReviews", authMiddleWare, async (req, res) => {
     if (req.user.role !== "admin") {
         return res.status(403).json({ success: false, message: "Access denied" });
     }
     try {
-      const reviews = await TeacherReview.find().populate("teacher", "name course");
+      const reviews = await TeacherReview.find({ isSeenByAdmin: false }).populate("teacher", "name course");
         res.json({ success: true, reviews });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Server error" });
+    }
+});
+
+router.put("/updateReviewStatus/:reviewId", authMiddleWare, async (req, res) => {
+    if (req.user.role !== "admin") {
+        return res.status(403).json({ success: false, message: "Access denied" });
+    }
+    const { reviewId } = req.params;
+    try {
+        const review = await TeacherReview.findById(reviewId);
+        if (!review) {
+            return res.status(404).json({ success: false, message: "Review not found" });
+        }
+        review.isSeenByAdmin = true;
+        await review.save();
+        res.json({ success: true, message: "Review status updated successfully" });
     } catch (error) {
         res.status(500).json({ success: false, message: "Server error" });
     }
