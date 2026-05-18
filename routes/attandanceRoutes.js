@@ -13,8 +13,6 @@ const findTeacherAssignment = (course, teacherId) => {
   );
 };
 
-
-
 router.get("/myCourses", authMiddleWare, async (req, res) => {
   try {
     const courses = await Course.find({
@@ -59,7 +57,7 @@ router.get("/classes/:courseId", authMiddleWare, async (req, res) => {
 });
 // router.patch("/migrate-classinfo", async (req, res) => {
 //   try {
-    
+
 //     // Find records missing classInfo
 //     const records = await Attendance.find({
 //       $or: [
@@ -109,7 +107,6 @@ router.get("/session", authMiddleWare, async (req, res) => {
       });
     }
 
-    
     classInfo = String(classInfo).trim();
 
     const dateObj = new Date(`${date}T00:00:00.000Z`);
@@ -119,7 +116,6 @@ router.get("/session", authMiddleWare, async (req, res) => {
 
     const end = new Date(dateObj);
     end.setUTCHours(23, 59, 59, 999);
-
 
     const course = await Course.findById(courseId);
 
@@ -143,9 +139,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
 
     if (req.user.role !== "admin") {
       const allowedClasses = new Set(
-        (teacherAssignment?.targetClasses || []).map((c) =>
-          String(c).trim()
-        )
+        (teacherAssignment?.targetClasses || []).map((c) => String(c).trim()),
       );
 
       if (!allowedClasses.has(classInfo)) {
@@ -157,7 +151,6 @@ router.get("/session", authMiddleWare, async (req, res) => {
       }
     }
 
-  
     const registrations = await Registration.find({
       classInfo,
       aboutCourse: {
@@ -169,10 +162,9 @@ router.get("/session", authMiddleWare, async (req, res) => {
       .filter((r) => r.student)
       .map((r) => r._id);
 
-    
     const attendanceDocs = await Attendance.find({
       course: courseId,
-   
+
       registration: { $in: registrationIds },
       date: {
         $gte: start,
@@ -182,11 +174,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
 
     const hasAttendanceToday = attendanceDocs.length > 0;
 
-    if (
-      hasAttendanceToday &&
-      (
-        fetchedBy === "teacherForMarkAttendance")
-    ) {
+    if (hasAttendanceToday && fetchedBy === "teacherForMarkAttendance") {
       return res.status(400).json({
         success: false,
         message:
@@ -194,7 +182,6 @@ router.get("/session", authMiddleWare, async (req, res) => {
       });
     }
 
-   
     const attendanceMap = new Map();
 
     attendanceDocs.forEach((item) => {
@@ -206,7 +193,6 @@ router.get("/session", authMiddleWare, async (req, res) => {
 
     const sessionTopic = attendanceDocs[0]?.topic || "";
 
- 
     const allAttendanceDocs = await Attendance.find({
       course: courseId,
       registration: { $in: registrationIds },
@@ -220,11 +206,11 @@ router.get("/session", authMiddleWare, async (req, res) => {
       if (!statsMap.has(regId)) {
         statsMap.set(regId, { total: 0, present: 0 });
       }
-let stats;
-      if(item.status !== "onLeave"){
-          stats = statsMap.get(regId);
+      let stats;
+      if (item.status !== "onLeave") {
+        stats = statsMap.get(regId);
 
-      stats.total += 1;
+        stats.total += 1;
       }
 
       if (item.status === "present") {
@@ -232,7 +218,6 @@ let stats;
       }
     });
 
-  
     const students = registrations
       .map((r) => {
         const student = r.student;
@@ -306,7 +291,8 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
     ) {
       return res.status(400).json({
         success: false,
-        message: "courseId, classInfo, date, topic and studentStatuses are required",
+        message:
+          "courseId, classInfo, date, topic and studentStatuses are required",
       });
     }
 
@@ -348,24 +334,24 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
       const studentId = String(entry.studentId || "");
       let status = entry.status;
 
-      if (!studentId || !["present", "absent", "onLeave"].includes(status)) continue;
+      if (!studentId || !["present", "absent", "onLeave"].includes(status))
+        continue;
 
       const registration = await Registration.findOne({
         student: studentId,
         classInfo,
         aboutCourse: { $elemMatch: { course: courseId } },
       });
-   
 
       if (!registration) continue;
-         const checkLeave = await LeaveApplication.findOne({
+      const checkLeave = await LeaveApplication.findOne({
         studentId,
         applicant: "Student",
         fromDate: { $lte: date },
         toDate: { $gte: date },
         status: "Approved",
       });
-      if(checkLeave){
+      if (checkLeave) {
         status = "onLeave";
       }
 
@@ -394,12 +380,10 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
         course: courseId,
       });
 
-      const total = allRecords.filter(a => a.status !== "onLeave").length;
-      const present = allRecords.filter(a => a.status === "present").length;
+      const total = allRecords.filter((a) => a.status !== "onLeave").length;
+      const present = allRecords.filter((a) => a.status === "present").length;
 
-      const percentage = total > 0
-        ? Math.round((present / total) * 100)
-        : 0;
+      const percentage = total > 0 ? Math.round((present / total) * 100) : 0;
 
       saved.percentage = percentage;
       await saved.save();
@@ -412,7 +396,6 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
       message: "Attendance saved successfully",
       records: savedRecords,
     });
-
   } catch (error) {
     console.error(error);
     return res.status(500).json({
@@ -446,15 +429,16 @@ router.get("/studentStats/:courseId", authMiddleWare, async (req, res) => {
       .select("date status topic")
       .sort({ date: -1 });
 
-    const total = attendanceDocs.filter(a => a.status !== "onLeave").length;
+    const total = attendanceDocs.filter((a) => a.status !== "onLeave").length;
     const present = attendanceDocs.filter(
-      (doc) => doc.status === "present"
+      (doc) => doc.status === "present",
     ).length;
 
     const absent = total - present;
-    const onLeave = attendanceDocs.filter((doc) => doc.status === "onLeave").length;
+    const onLeave = attendanceDocs.filter(
+      (doc) => doc.status === "onLeave",
+    ).length;
     const percentage = total > 0 ? Math.round((present / total) * 100) : 0;
-
 
     const recentAttendance = attendanceDocs
       .slice(0, 30)
@@ -525,7 +509,6 @@ router.get("/studentStats/:courseId", authMiddleWare, async (req, res) => {
       }
     });
 
-
     const monthlyDetails = Object.entries(monthlyData)
       .sort(([a], [b]) => b.localeCompare(a))
       .map(([, data]) => ({
@@ -591,7 +574,6 @@ router.get(
         });
       }
 
-   
       let dateFilter = {};
 
       if (startDate || endDate) {
@@ -608,7 +590,6 @@ router.get(
         }
       }
 
-   
       const Student = require("../modals/Student");
 
       const students = await Student.find({
@@ -617,14 +598,12 @@ router.get(
 
       const studentIds = students.map((s) => s._id);
 
-    
       const registrations = await Registration.find({
         student: { $in: studentIds },
       });
 
       const registrationIds = registrations.map((r) => r._id);
 
-    
       let attendanceFilter = {
         registration: { $in: registrationIds },
         ...dateFilter,
@@ -634,7 +613,6 @@ router.get(
         attendanceFilter.course = course;
       }
 
- 
       const attendanceRecords = await Attendance.find(attendanceFilter)
         .populate({
           path: "registration",
@@ -647,15 +625,13 @@ router.get(
         .populate("course", "title")
         .sort({ date: -1 });
 
-
       const formattedAttendance = attendanceRecords.map((record) => {
         const d = new Date(record.date);
 
         return {
           _id: record._id,
           studentName: record.registration?.student?.name || "N/A",
-          rollNumber:
-            record.registration?.student?.rollNumber || "N/A",
+          rollNumber: record.registration?.student?.rollNumber || "N/A",
           courseName: record.course?.title || "N/A",
 
           // UTC SAFE DATE
@@ -681,16 +657,17 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 // Get student attendance by student ID
 
 router.get("/getStudentAttendance", authMiddleWare, async (req, res) => {
   try {
-    if (req.user.role !== "admin" && req.user.role !== "teacher" ) {
+    if (req.user.role !== "admin" && req.user.role !== "teacher") {
       return res.status(403).json({
-        message: "Unauthorized, Only admins and teachers can fetch student attendance",
+        message:
+          "Unauthorized, Only admins and teachers can fetch student attendance",
         success: false,
       });
     }
@@ -823,8 +800,7 @@ router.post(
     try {
       if (req.user.role !== "admin") {
         return res.status(403).json({
-          message:
-            "Unauthorized, Only admins can update attendance records",
+          message: "Unauthorized, Only admins can update attendance records",
           success: false,
         });
       }
@@ -832,7 +808,7 @@ router.post(
       const { attendanceId } = req.params;
       const { status } = req.body;
 
-      if (!["present", "absent", ].includes(status)) {
+      if (!["present", "absent"].includes(status)) {
         return res.status(400).json({
           message: "Invalid status value",
           success: false,
@@ -848,12 +824,10 @@ router.post(
         });
       }
 
-     
       const nowUTC = Date.now();
       const recordUTC = new Date(attendanceRecord.date).getTime();
 
-      const hoursDifference =
-        (nowUTC - recordUTC) / (1000 * 60 * 60);
+      const hoursDifference = (nowUTC - recordUTC) / (1000 * 60 * 60);
 
       if (hoursDifference > 72) {
         return res.status(400).json({
@@ -862,7 +836,6 @@ router.post(
           success: false,
         });
       }
-
 
       const totalRecords = await Attendance.countDocuments({
         registration: attendanceRecord.registration,
@@ -876,9 +849,7 @@ router.post(
       });
 
       const percentage =
-        totalRecords > 0
-          ? (presentRecords / totalRecords) * 100
-          : 0;
+        totalRecords > 0 ? (presentRecords / totalRecords) * 100 : 0;
 
       const updated = await Attendance.findByIdAndUpdate(
         attendanceId,
@@ -886,7 +857,7 @@ router.post(
           status,
           percentage,
         },
-        { new: true }
+        { new: true },
       );
 
       if (!updated) {
@@ -896,7 +867,6 @@ router.post(
         });
       }
 
-      
       const d = new Date(updated.date);
 
       return res.status(200).json({
@@ -916,108 +886,112 @@ router.post(
         error: error.message,
       });
     }
-  }
+  },
 );
 
-router.put("/updateLeaveAttendance/:studentId", authMiddleWare, async (req, res) => {
-
-  if (req.user.role !== "admin") {
-    return res.status(401).json({
-      success: false,
-      message: "Unauthorized! Only admin can change this"
-    });
-  }
-
-  const studentId = req.params.studentId;
-  let { startDate, endDate } = req.body;
-
-  if (!startDate || !endDate) {
-    return res.status(400).json({
-      success: false,
-      message: "Start Date and End Date required"
-    });
-  }
-
-  if (!studentId) {
-    return res.status(400).json({
-      success: false,
-      message: "StudentId Required"
-    });
-  }
-
-  try {
-
-    // Convert future endDate to yesterday
-    const today = new Date();
-
-    if (new Date(endDate) > today) {
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-
-      endDate = yesterday.toISOString().split("T")[0];
+router.put(
+  "/updateLeaveAttendance/:studentId",
+  authMiddleWare,
+  async (req, res) => {
+    if (req.user.role !== "admin") {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized! Only admin can change this",
+      });
     }
 
-    // Validate startDate
-    if (new Date(startDate) > today) {
+    const studentId = req.params.studentId;
+    let { startDate, endDate } = req.body;
+
+    if (!startDate || !endDate) {
       return res.status(400).json({
         success: false,
-        message: "Start date cannot be in the future",
+        message: "Start Date and End Date required",
       });
     }
 
-    // Validate range
-    if (new Date(endDate) < new Date(startDate)) {
+    if (!studentId) {
       return res.status(400).json({
         success: false,
-        message: "End date cannot be before start date",
+        message: "StudentId Required",
       });
     }
 
-    const registration = await Registration.findOne({
-      student: studentId,
-    });
+    try {
+      // Convert future endDate to yesterday
+      const today = new Date();
 
-    if (!registration) {
-      return res.status(404).json({
-        success: false,
-        message: "Registration not found"
-      });
-    }
+      if (new Date(endDate) > today) {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
 
-    const startDateObj = new Date(startDate);
-    startDateObj.setHours(0, 0, 0, 0);
-
-    const endDateObj = new Date(endDate);
-    endDateObj.setHours(23, 59, 59, 999);
-
-    const updated = await Attendance.updateMany(
-      {
-        registration: registration._id,
-        date: {
-          $gte: startDateObj,
-          $lte: endDateObj,
-        },
-      },
-      {
-        $set: { status: "onLeave" }
+        endDate = yesterday.toISOString().split("T")[0];
       }
-    );
 
-    return res.status(200).json({
-      success: true,
-      message: "Attendance updated successfully",
-      modifiedCount: updated.modifiedCount,
-    });
+      // Validate startDate
+      if (new Date(startDate) > today) {
+        return res.status(400).json({
+          success: false,
+          message: "Start date cannot be in the future",
+        });
+      }
 
-  } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: "Server error",
-      error: error.message,
-    });
-  }
-});
+      // Validate range
+      if (new Date(endDate) < new Date(startDate)) {
+        return res.status(400).json({
+          success: false,
+          message: "End date cannot be before start date",
+        });
+      }
 
+      const registrations = await Registration.find({
+        student: studentId,
+      }).select("_id");
+
+      if (!registrations.length) {
+        return res.status(404).json({
+          success: false,
+          message: "Registration not found",
+        });
+      }
+
+      const registrationIds = registrations.map(
+        (registration) => registration._id,
+      );
+
+      const startDateObj = new Date(startDate);
+      startDateObj.setHours(0, 0, 0, 0);
+
+      const endDateObj = new Date(endDate);
+      endDateObj.setHours(23, 59, 59, 999);
+
+      const updated = await Attendance.updateMany(
+        {
+          registration: { $in: registrationIds },
+          date: {
+            $gte: startDateObj,
+            $lte: endDateObj,
+          },
+        },
+        {
+          $set: { status: "onLeave" },
+        },
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: "Attendance updated successfully",
+        modifiedCount: updated.modifiedCount,
+      });
+    } catch (error) {
+      return res.status(500).json({
+        success: false,
+        message: "Server error",
+        error: error.message,
+      });
+    }
+  },
+);
 
 // router.put("/fix-attendance-dates", async (req, res) => {
 //   try {
