@@ -220,9 +220,9 @@ router.get("/session", authMiddleWare, async (req, res) => {
       if (!statsMap.has(regId)) {
         statsMap.set(regId, { total: 0, present: 0 });
       }
-
+let stats;
       if(item.status !== "onLeave"){
-        const stats = statsMap.get(regId);
+          stats = statsMap.get(regId);
 
       stats.total += 1;
       }
