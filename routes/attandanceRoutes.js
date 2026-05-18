@@ -832,7 +832,7 @@ router.post(
       const { attendanceId } = req.params;
       const { status } = req.body;
 
-      if (!["present", "absent"].includes(status)) {
+      if (!["present", "absent", ].includes(status)) {
         return res.status(400).json({
           message: "Invalid status value",
           success: false,
@@ -918,6 +918,105 @@ router.post(
     }
   }
 );
+
+router.put("/updateLeaveAttendance/:studentId", authMiddleWare, async (req, res) => {
+
+  if (req.user.role !== "admin") {
+    return res.status(401).json({
+      success: false,
+      message: "Unauthorized! Only admin can change this"
+    });
+  }
+
+  const studentId = req.params.studentId;
+  let { startDate, endDate } = req.body;
+
+  if (!startDate || !endDate) {
+    return res.status(400).json({
+      success: false,
+      message: "Start Date and End Date required"
+    });
+  }
+
+  if (!studentId) {
+    return res.status(400).json({
+      success: false,
+      message: "StudentId Required"
+    });
+  }
+
+  try {
+
+    // Convert future endDate to yesterday
+    const today = new Date();
+
+    if (new Date(endDate) > today) {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      endDate = yesterday.toISOString().split("T")[0];
+    }
+
+    // Validate startDate
+    if (new Date(startDate) > today) {
+      return res.status(400).json({
+        success: false,
+        message: "Start date cannot be in the future",
+      });
+    }
+
+    // Validate range
+    if (new Date(endDate) < new Date(startDate)) {
+      return res.status(400).json({
+        success: false,
+        message: "End date cannot be before start date",
+      });
+    }
+
+    const registration = await Registration.findOne({
+      student: studentId,
+    });
+
+    if (!registration) {
+      return res.status(404).json({
+        success: false,
+        message: "Registration not found"
+      });
+    }
+
+    const startDateObj = new Date(startDate);
+    startDateObj.setHours(0, 0, 0, 0);
+
+    const endDateObj = new Date(endDate);
+    endDateObj.setHours(23, 59, 59, 999);
+
+    const updated = await Attendance.updateMany(
+      {
+        registration: registration._id,
+        date: {
+          $gte: startDateObj,
+          $lte: endDateObj,
+        },
+      },
+      {
+        $set: { status: "onLeave" }
+      }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Attendance updated successfully",
+      modifiedCount: updated.modifiedCount,
+    });
+
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    });
+  }
+});
 
 
 // router.put("/fix-attendance-dates", async (req, res) => {
