@@ -509,7 +509,6 @@ router.get("/studentStats/:courseId", authMiddleWare, async (req, res) => {
           monthLabel,
           present: 0,
           absent: 0,
-          onLeave: 0,
           year,
           monthNumber: monthIndex + 1,
         };
@@ -517,10 +516,8 @@ router.get("/studentStats/:courseId", authMiddleWare, async (req, res) => {
 
       if (doc.status === "present") {
         monthlyData[monthKey].present += 1;
-      } else if (doc.status === "absent") {
+      } else {
         monthlyData[monthKey].absent += 1;
-      } else if (doc.status === "onLeave") {
-        monthlyData[monthKey].onLeave += 1;
       }
     });
 
@@ -529,7 +526,7 @@ router.get("/studentStats/:courseId", authMiddleWare, async (req, res) => {
       .sort(([a], [b]) => b.localeCompare(a))
       .map(([, data]) => ({
         ...data,
-        total: data.present + data.absent + data.onLeave,
+        total: data.present + data.absent,
         history:
           monthlyHistoryMap[
             `${data.year}-${String(data.monthNumber).padStart(2, "0")}`
@@ -542,7 +539,6 @@ router.get("/studentStats/:courseId", authMiddleWare, async (req, res) => {
       month: item.month,
       present: item.present,
       absent: item.absent,
-      onLeave: item.onLeave,
     }));
 
     return res.json({
@@ -551,7 +547,6 @@ router.get("/studentStats/:courseId", authMiddleWare, async (req, res) => {
         total,
         present,
         absent,
-        onLeave,
         percentage,
       },
       chartData,
