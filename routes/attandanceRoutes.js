@@ -346,7 +346,7 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
 
     for (const entry of studentStatuses) {
       const studentId = String(entry.studentId || "");
-      const status = entry.status;
+      let status = entry.status;
 
       if (!studentId || !["present", "absent"].includes(status)) continue;
 
