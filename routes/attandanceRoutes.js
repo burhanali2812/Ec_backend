@@ -3,6 +3,7 @@ const Course = require("../modals/Course");
 const Registration = require("../modals/Registration");
 const Attendance = require("../modals/Attandance");
 const authMiddleWare = require("../authMiddleWare");
+const LeaveApplication = require("../modals/LeaveApplication");
 
 const router = express.Router();
 
