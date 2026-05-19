@@ -921,13 +921,22 @@ router.put(
       // Convert future endDate to yesterday
       const today = new Date();
 
-      if (new Date(endDate) > today) {
+      if (new Date(endDate) >= today && new Date().getHours() <= 16 ) {
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
 
         endDate = yesterday.toISOString().split("T")[0];
       }
+      //check if the api request is 9pm today then the end date become today 
+   
 
+        if(new Date().getHours() >= 16 && new Date(endDate) >= today){ 
+          endDate = today.toISOString().split("T")[0];
+        }
+        //if end date is before today then no change needed
+        if(new Date(endDate) < today){
+          endDate = endDate;
+        }
       // Validate startDate
       if (new Date(startDate) > today) {
         return res.status(400).json({
