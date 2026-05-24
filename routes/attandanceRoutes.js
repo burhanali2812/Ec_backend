@@ -829,13 +829,7 @@ router.post(
 
       const hoursDifference = (nowUTC - recordUTC) / (1000 * 60 * 60);
 
-      if (hoursDifference > 72) {
-        return res.status(400).json({
-          message:
-            "Attendance record cannot be updated as it is older than 72 hours",
-          success: false,
-        });
-      }
+    
 
       const totalRecords = await Attendance.countDocuments({
         registration: attendanceRecord.registration,
