@@ -808,7 +808,7 @@ router.post(
       const { attendanceId } = req.params;
       const { status } = req.body;
 
-      if (!["present", "absent"].includes(status)) {
+      if (!["present", "absent", "onLeave"].includes(status)) {
         return res.status(400).json({
           message: "Invalid status value",
           success: false,
