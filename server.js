@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const express = require("express");
 const cors = require("cors");
 const cron = require("node-cron");
+const moment = require("moment-timezone");
 require("dotenv").config();
 
 const app = express();
@@ -44,10 +45,9 @@ const StudentFee = require("./modals/StudentFee");
  */
 const generateMonthlyFees = async () => {
   try {
-    const currentDate = new Date();
-    const month = `${currentDate.getFullYear()}-${String(
-      currentDate.getMonth() + 1
-    ).padStart(2, "0")}`;
+    const currentDate = moment().tz("Asia/Karachi");
+
+const month = currentDate.format("YYYY-MM");
 
     console.log(`\n🔄 Generating fees for ${month}`);
 
@@ -175,7 +175,7 @@ connectDB().then(() => {
 
   // PRODUCTION CRON (1st day of every month at midnight)
 cron.schedule(
-  "50 1 1 * *",
+  "20 2 1 * *",
   async () => {
     console.log("Monthly Fee Cron Started");
     await generateMonthlyFees();
