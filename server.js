@@ -174,7 +174,7 @@ connectDB().then(() => {
   // cron.schedule("* * * * *", async () => {
 
   // PRODUCTION CRON (1st day of every month at midnight)
-  cron.schedule("2 11 1 * *", async () => {
+  cron.schedule("25 1 1 * *", async () => {
     console.log("⏰ Monthly Fee Cron Started");
     await generateMonthlyFees();
   });
