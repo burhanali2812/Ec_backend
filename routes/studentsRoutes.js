@@ -427,19 +427,11 @@ router.put("/payStudentFee/:feeId", authMiddleWare, async (req, res) => {
     const { feeId } = req.params;
     const { amountPaid } = req.body;
 
+    // Validate input
     if (!feeId || amountPaid === undefined) {
       return res.status(400).json({
         success: false,
         message: "feeId and amountPaid are required",
-      });
-    }
-
-    const studentFee = await StudentFee.findById(feeId);
-
-    if (!studentFee) {
-      return res.status(404).json({
-        success: false,
-        message: "Student fee record not found",
       });
     }
 
@@ -452,39 +444,36 @@ router.put("/payStudentFee/:feeId", authMiddleWare, async (req, res) => {
       });
     }
 
-    // Reset fee
-    if (payment === 0) {
-      studentFee.amountPaid = 0;
-      studentFee.remainingFee = studentFee.finalFee;
-      studentFee.status = "unpaid";
-      studentFee.paidAt = null;
+    const studentFee = await StudentFee.findById(feeId);
 
-      await studentFee.save();
-
-      return res.status(200).json({
-        success: true,
-        message: "Fee reset successfully",
-        studentFee,
+    if (!studentFee) {
+      return res.status(404).json({
+        success: false,
+        message: "Student fee record not found",
       });
     }
 
-    // Add new payment
-    studentFee.amountPaid += payment;
-
-    // Prevent overpayment
-    if (studentFee.amountPaid > studentFee.finalFee) {
-      studentFee.amountPaid = studentFee.finalFee;
+    // Prevent payment greater than final fee
+    if (payment > studentFee.finalFee) {
+      return res.status(400).json({
+        success: false,
+        message: `Amount cannot exceed final fee (${studentFee.finalFee}).`,
+      });
     }
 
-    studentFee.remainingFee =
-      studentFee.finalFee - studentFee.amountPaid;
+    // Set total amount paid (NOT +=)
+    studentFee.amountPaid = payment;
+
+    // Calculate remaining fee
+    studentFee.remainingFee = studentFee.finalFee - payment;
 
     // Calculate status
-    if (studentFee.amountPaid === 0) {
+    if (payment === 0) {
       studentFee.status = "unpaid";
       studentFee.paidAt = null;
-    } else if (studentFee.remainingFee === 0) {
+    } else if (payment === studentFee.finalFee) {
       studentFee.status = "paid";
+      studentFee.remainingFee = 0;
       studentFee.paidAt = new Date();
     } else {
       studentFee.status = "partial";
@@ -498,8 +487,9 @@ router.put("/payStudentFee/:feeId", authMiddleWare, async (req, res) => {
       message: "Fee payment updated successfully",
       studentFee,
     });
+
   } catch (error) {
-    console.error(error);
+    console.error("Pay Fee Error:", error);
 
     return res.status(500).json({
       success: false,
