@@ -475,6 +475,7 @@ router.put("/payStudentFee/:feeId", authMiddleWare, async (req, res) => {
         studentFee,
       });
     }
+    
     if(status && status === "partial") {
       studentFee.status = "partial";
       studentFee.amountPaid += paid;
