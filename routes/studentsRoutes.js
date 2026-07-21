@@ -423,12 +423,19 @@ router.post("/studentFee", authMiddleWare, async (req, res) => {
 });
 
 router.put("/payStudentFee/:feeId", authMiddleWare, async (req, res) => {
-  const { amountPaid } = req.body;
+  const { amountPaid , status} = req.body;
   const { feeId } = req.params;
 
   if (!feeId || amountPaid === undefined) {
     return res.status(400).json({
       message: "feeId and amountPaid are required",
+      success: false,
+      error: "Missing required fields",
+    });
+  }
+  if(status && !["unpaid", "partial", "paid"].includes(status)) {
+    return res.status(400).json({
+      message: "Invalid status value. Must be 'unpaid', 'partial', or 'paid'.",
       success: false,
     });
   }
@@ -468,16 +475,31 @@ router.put("/payStudentFee/:feeId", authMiddleWare, async (req, res) => {
         studentFee,
       });
     }
+    if(status && status === "partial") {
+      studentFee.status = "partial";
+      studentFee.amountPaid += paid;
+      if (studentFee.amountPaid > studentFee.finalFee) {
+        studentFee.amountPaid = studentFee.finalFee;
+      }
+      studentFee.remainingFee = studentFee.finalFee - studentFee.amountPaid;
+      await studentFee.save();
 
-    // ✅ NORMAL PAYMENT FLOW
-    studentFee.amountPaid += paid;
-
-    // cap to finalFee
-    if (studentFee.amountPaid > studentFee.finalFee) {
-      studentFee.amountPaid = studentFee.finalFee;
+      return res.status(200).json({
+        message: "Fee payment updated successfully",
+        success: true,
+        studentFee,
+      });
     }
 
-    studentFee.remainingFee = studentFee.finalFee - studentFee.amountPaid;
+    //   NORMAL PAYMENT FLOW
+    // studentFee.amountPaid += paid;
+
+    //  cap to finalFee
+    // if (studentFee.amountPaid > studentFee.finalFee) {
+    //   studentFee.amountPaid = studentFee.finalFee;
+    // }
+
+    // studentFee.remainingFee = studentFee.finalFee - studentFee.amountPaid;
 
     if (studentFee.remainingFee === 0) {
       studentFee.status = "paid";
