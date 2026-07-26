@@ -23,7 +23,7 @@ const registrationSchema = new mongoose.Schema(
       enum: ["Academy", "School"],
       required: true,
     },
-    classInfo: { type: String, required: true },
+    classInfo: { type: mongoose.Schema.Types.ObjectId, ref: "Class", required: true },
   },
   { timestamps: true },
 );

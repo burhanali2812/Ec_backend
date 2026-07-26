@@ -8,6 +8,7 @@ const authMiddleWare = require("../authMiddleWare");
 const StudentFee = require("../modals/StudentFee");
 const Counter = require("../modals/Counter");
 const TeacherReview = require("../modals/TeacherReviews");
+const Class = require("../modals/Class"); // Import the Class model
  // Import the counter model
 
 router.post("/signUp", authMiddleWare, async (req, res) => {
@@ -858,5 +859,44 @@ router.post("/teacherReview", authMiddleWare, async (req, res) => {
     res.status(500).json({ message: error.message, success: false });
   }
 });
+
+router.post("/replaceStudentClassById", async (req, res) => {
+ try {
+   const studentData = await Student.find();
+  const classData = await Class.find();
+  const replaceData = [];
+
+  for (const student of studentData) {
+    const classInfo = classData.find(
+      (cls) => cls.name === student.classInfo,
+    );
+    if (classInfo) {
+      student.classInfo = classInfo._id;
+    
+      replaceData.push({
+        studentId: student._id,
+        studentName: student.name,
+        oldClassInfo: student.classInfo,
+        newClassInfo: classInfo._id,
+      });
+        await student.save();
+  
+    }
+
+    res.status(200).json({
+        message: "Student classInfo replaced with class ID successfully",
+        data: replaceData,
+        success: true,
+      });  }
+}catch (error) {
+  console.error("Error replacing classInfo with class ID:", error);
+  res.status(500).json({
+    message: "Error occurred while updating student classInfo",
+    success: false,
+    error: error.message,
+  });
+}
+});
+  
 
 module.exports = router;

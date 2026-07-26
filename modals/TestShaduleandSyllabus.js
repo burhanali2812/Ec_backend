@@ -8,8 +8,8 @@ const testScheduleAndSyllabusSchema = new mongoose.Schema(
             required: true,
         },
         classInfo: {
-            type: String,
-            enum: ["Pre-9th", "9th", "10th", "11th", "12th"],
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Class",
             required: true,
         },
         syllabus: {

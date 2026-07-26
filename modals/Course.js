@@ -13,7 +13,7 @@ const courseSchema = new mongoose.Schema({
         required: true,
       },
       // This tells us which classes THIS teacher handles for THIS course
-      targetClasses: [{ type: String, required: true }], // e.g., ["9th", "10th"]
+      targetClasses: [{ type: mongoose.Schema.Types.ObjectId, ref: "Class", required: true }], // e.g., ["9th", "10th"]
     },
   ],
   

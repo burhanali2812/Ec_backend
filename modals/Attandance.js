@@ -35,8 +35,8 @@ const attendanceSchema = new mongoose.Schema({
     default: 0,
   },
   classInfo: {
-    type: String,
-    enum: ["9th", "10th", "11th", "12th", "pre-9th"],
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Class",
     required: true,
   },
 
