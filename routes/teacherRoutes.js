@@ -5,6 +5,7 @@ const Teacher = require("../modals/Teacher");
 const Course = require("../modals/Course");
 const Registration = require("../modals/Registration");
 const authMiddleWare = require("../authMiddleWare");
+const Class = require("../modals/Class");
 const router = express.Router();
 
 router.post("/signUp", async (req, res) => {
