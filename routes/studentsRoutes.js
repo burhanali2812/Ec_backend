@@ -861,41 +861,73 @@ router.post("/teacherReview", authMiddleWare, async (req, res) => {
 });
 
 router.post("/replaceStudentClassById", async (req, res) => {
- try {
-   const studentData = await Student.find();
-  const classData = await Class.find();
-  const replaceData = [];
+  try {
+    const students = await Student.find();
+    const classes = await Class.find();
 
-  for (const student of studentData) {
-    const classInfo = classData.find(
-      (cls) => cls.name === student.classInfo,
-    );
-    if (classInfo) {
-      student.classInfo = classInfo._id;
-    
+    const replaceData = [];
+    let updated = 0;
+    let notFound = 0;
+
+    for (const student of students) {
+      // Skip if already ObjectId
+      if (mongoose.Types.ObjectId.isValid(student.classInfo)) {
+        continue;
+      }
+
+      const matchedClass = classes.find(
+        (cls) =>
+          cls.name.trim().toLowerCase() ===
+          String(student.classInfo).trim().toLowerCase()
+      );
+
+      if (!matchedClass) {
+        notFound++;
+
+        replaceData.push({
+          studentId: student._id,
+          studentName: student.name,
+          studentClass: student.classInfo,
+          status: "Class Not Found",
+        });
+
+        continue;
+      }
+
+      const oldClassInfo = student.classInfo;
+
+      student.classInfo = matchedClass._id;
+
+      await student.save();
+
+      updated++;
+
       replaceData.push({
         studentId: student._id,
         studentName: student.name,
-        oldClassInfo: student.classInfo,
-        newClassInfo: classInfo._id,
+        oldClassInfo,
+        newClassInfo: matchedClass._id,
+        status: "Updated",
       });
-        await student.save();
-  
     }
 
-    res.status(200).json({
-        message: "Student classInfo replaced with class ID successfully",
-        data: replaceData,
-        success: true,
-      });  }
-}catch (error) {
-  console.error("Error replacing classInfo with class ID:", error);
-  res.status(500).json({
-    message: "Error occurred while updating student classInfo",
-    success: false,
-    error: error.message,
-  });
-}
+    return res.status(200).json({
+      success: true,
+      message: "Migration completed.",
+      totalStudents: students.length,
+      updated,
+      notFound,
+      data: replaceData,
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Migration failed.",
+      error: error.message,
+    });
+  }
 });
   
 
