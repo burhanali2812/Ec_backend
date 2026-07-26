@@ -863,8 +863,8 @@ router.post("/teacherReview", authMiddleWare, async (req, res) => {
 
 router.post("/replaceStudentClassById", async (req, res) => {
   try {
-    const students = await Student.find();
-    const classes = await Class.find();
+    const students = await Student.collection.find({}).toArray();
+    const classes = await Class.collection.find({}).toArray();
 
     let updated = 0;
 
@@ -877,7 +877,7 @@ router.post("/replaceStudentClassById", async (req, res) => {
 
       if (!matchedClass) continue;
 
-      await Student.updateOne(
+      await Student.collection.updateOne(
         { _id: student._id },
         {
           $set: {
@@ -898,6 +898,5 @@ router.post("/replaceStudentClassById", async (req, res) => {
     res.status(500).json(err);
   }
 });
-  
 
 module.exports = router;
