@@ -866,87 +866,36 @@ router.post("/replaceStudentClassById", async (req, res) => {
     const students = await Student.find();
     const classes = await Class.find();
 
-    const replaceData = [];
     let updated = 0;
-    let notFound = 0;
 
     for (const student of students) {
-      let className = "";
-
-      // Handle different possible formats
-      if (typeof student.classInfo === "string") {
-        className = student.classInfo.trim();
-      } else if (
-        student.classInfo &&
-        typeof student.classInfo === "object"
-      ) {
-        className =
-          student.classInfo.name ||
-          student.classInfo.className ||
-          student.classInfo.toString();
-      }
-
-      console.log(
-        "Student:",
-        student.name,
-        "| classInfo:",
-        student.classInfo,
-        "| extracted:",
-        className
-      );
-
       const matchedClass = classes.find(
-        (cls) =>
+        cls =>
           cls.name.trim().toLowerCase() ===
-          String(className).trim().toLowerCase()
+          student.classInfo.trim().toLowerCase()
       );
 
-      if (!matchedClass) {
-        notFound++;
+      if (!matchedClass) continue;
 
-        replaceData.push({
-          studentId: student._id,
-          studentName: student.name,
-          currentValue: student.classInfo,
-          extractedClass: className,
-          status: "Class Not Found",
-        });
-
-        continue;
-      }
-
-      const oldClassInfo = student.classInfo;
-
-      student.classInfo = matchedClass._id;
-      await student.save();
+      await Student.updateOne(
+        { _id: student._id },
+        {
+          $set: {
+            classInfo: matchedClass._id,
+          },
+        }
+      );
 
       updated++;
-
-      replaceData.push({
-        studentId: student._id,
-        studentName: student.name,
-        oldClassInfo,
-        newClassInfo: matchedClass._id,
-        status: "Updated",
-      });
     }
 
-    return res.status(200).json({
+    return res.json({
       success: true,
-      message: "Migration completed.",
-      totalStudents: students.length,
       updated,
-      notFound,
-      data: replaceData,
     });
-  } catch (error) {
-    console.error(error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Migration failed.",
-      error: error.message,
-    });
+  } catch (err) {
+    console.log(err);
+    res.status(500).json(err);
   }
 });
   
