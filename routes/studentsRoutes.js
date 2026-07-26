@@ -871,14 +871,34 @@ router.post("/replaceStudentClassById", async (req, res) => {
     let notFound = 0;
 
     for (const student of students) {
-      // Skip if already ObjectId
-      if (mongoose.Types.ObjectId.isValid(student.classInfo)) {
-        continue;
+      let className = "";
+
+      // Handle different possible formats
+      if (typeof student.classInfo === "string") {
+        className = student.classInfo.trim();
+      } else if (
+        student.classInfo &&
+        typeof student.classInfo === "object"
+      ) {
+        className =
+          student.classInfo.name ||
+          student.classInfo.className ||
+          student.classInfo.toString();
       }
+
+      console.log(
+        "Student:",
+        student.name,
+        "| classInfo:",
+        student.classInfo,
+        "| extracted:",
+        className
+      );
 
       const matchedClass = classes.find(
         (cls) =>
-          cls.name === student.classInfo
+          cls.name.trim().toLowerCase() ===
+          String(className).trim().toLowerCase()
       );
 
       if (!matchedClass) {
@@ -887,7 +907,8 @@ router.post("/replaceStudentClassById", async (req, res) => {
         replaceData.push({
           studentId: student._id,
           studentName: student.name,
-          studentClass: student.classInfo,
+          currentValue: student.classInfo,
+          extractedClass: className,
           status: "Class Not Found",
         });
 
@@ -897,7 +918,6 @@ router.post("/replaceStudentClassById", async (req, res) => {
       const oldClassInfo = student.classInfo;
 
       student.classInfo = matchedClass._id;
-
       await student.save();
 
       updated++;
