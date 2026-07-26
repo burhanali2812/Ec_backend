@@ -397,63 +397,60 @@ router.post("/auth/verify-email-for-reset", async (req, res) => {
 //   }
 // });
 
-router.post("/replaceCourseTargetClasses", async (req, res) => {
+router.post("/replaceAssignmentTargetClasses", async (req, res) => {
   try {
     const courses = await Course.collection.find({}).toArray();
     const classes = await Class.collection.find({}).toArray();
 
-    const updatedCourses = [];
+    const result = [];
 
     for (const course of courses) {
-      const newTargetClasses = [];
-      const notFound = [];
+      if (!course.assignments || course.assignments.length === 0) continue;
 
-      for (const className of course.targetClasses || []) {
-        const matchedClass = classes.find(
-          (cls) =>
-            cls.name.trim().toLowerCase() ===
-            String(className).trim().toLowerCase()
-        );
+      for (const assignment of course.assignments) {
+        const newTargetClasses = [];
 
-        if (matchedClass) {
-          newTargetClasses.push(matchedClass._id);
-        } else {
-          notFound.push(className);
+        for (const className of assignment.targetClasses || []) {
+          const matchedClass = classes.find(
+            (cls) =>
+              cls.name.trim().toLowerCase() ===
+              String(className).trim().toLowerCase()
+          );
+
+          if (matchedClass) {
+            newTargetClasses.push(matchedClass._id);
+          }
         }
+
+        assignment.targetClasses = newTargetClasses;
       }
 
       await Course.collection.updateOne(
         { _id: course._id },
         {
           $set: {
-            targetClasses: newTargetClasses,
+            assignments: course.assignments,
           },
         }
       );
 
-      updatedCourses.push({
-        courseId: course._id,
-        title: course.title,
-        oldTargetClasses: course.targetClasses,
-        newTargetClasses,
-        notFound,
+      result.push({
+        course: course.title,
+        assignments: course.assignments,
       });
     }
 
-    return res.status(200).json({
+    return res.json({
       success: true,
-      message: "Course target classes migrated successfully.",
-      totalCourses: courses.length,
-      updated: updatedCourses.length,
-      data: updatedCourses,
+      updated: result.length,
+      data: result,
     });
-  } catch (error) {
-    console.error(error);
+  } catch (err) {
+    console.error(err);
 
     return res.status(500).json({
       success: false,
-      message: "Migration failed.",
-      error: error.message,
+      error: err.message,
     });
   }
 });
