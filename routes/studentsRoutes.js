@@ -8,6 +8,7 @@ const authMiddleWare = require("../authMiddleWare");
 const StudentFee = require("../modals/StudentFee");
 const Counter = require("../modals/Counter");
 const TeacherReview = require("../modals/TeacherReviews");
+const mongoose = require("mongoose");
 const Class = require("../modals/Class"); // Import the Class model
  // Import the counter model
 
