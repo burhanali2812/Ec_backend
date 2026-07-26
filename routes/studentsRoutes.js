@@ -878,8 +878,7 @@ router.post("/replaceStudentClassById", async (req, res) => {
 
       const matchedClass = classes.find(
         (cls) =>
-          cls.name.trim().toLowerCase() ===
-          String(student.classInfo).trim().toLowerCase()
+          cls.name === student.classInfo
       );
 
       if (!matchedClass) {
