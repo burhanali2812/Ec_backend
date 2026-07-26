@@ -396,6 +396,67 @@ router.post("/auth/verify-email-for-reset", async (req, res) => {
 //   }
 // });
 
+router.post("/replaceCourseTargetClasses", async (req, res) => {
+  try {
+    const courses = await Course.collection.find({}).toArray();
+    const classes = await Class.collection.find({}).toArray();
+
+    const updatedCourses = [];
+
+    for (const course of courses) {
+      const newTargetClasses = [];
+      const notFound = [];
+
+      for (const className of course.targetClasses || []) {
+        const matchedClass = classes.find(
+          (cls) =>
+            cls.name.trim().toLowerCase() ===
+            String(className).trim().toLowerCase()
+        );
+
+        if (matchedClass) {
+          newTargetClasses.push(matchedClass._id);
+        } else {
+          notFound.push(className);
+        }
+      }
+
+      await Course.collection.updateOne(
+        { _id: course._id },
+        {
+          $set: {
+            targetClasses: newTargetClasses,
+          },
+        }
+      );
+
+      updatedCourses.push({
+        courseId: course._id,
+        title: course.title,
+        oldTargetClasses: course.targetClasses,
+        newTargetClasses,
+        notFound,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Course target classes migrated successfully.",
+      totalCourses: courses.length,
+      updated: updatedCourses.length,
+      data: updatedCourses,
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Migration failed.",
+      error: error.message,
+    });
+  }
+});
+
 
 
 module.exports = router;
