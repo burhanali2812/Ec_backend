@@ -158,4 +158,73 @@ router.get("/allRegistrations", authMiddleWare, async (req, res) => {
   }
 });
 
+router.post("/migrateRegistrationClassInfo", async (req, res) => {
+  try {
+    const registrations = await Registration.collection.find({}).toArray();
+    const classes = await Class.collection.find({}).toArray();
+
+    const result = [];
+    let updated = 0;
+    let notFound = 0;
+
+    for (const registration of registrations) {
+      const className = String(registration.classInfo || "").trim();
+
+      const matchedClass = classes.find(
+        (cls) =>
+          cls.name.trim().toLowerCase() === className.toLowerCase()
+      );
+
+      if (!matchedClass) {
+        notFound++;
+
+        result.push({
+          registrationId: registration._id,
+          student: registration.student,
+          currentClass: registration.classInfo,
+          status: "Class Not Found",
+        });
+
+        continue;
+      }
+
+      await Registration.collection.updateOne(
+        { _id: registration._id },
+        {
+          $set: {
+            classInfo: matchedClass._id,
+          },
+        }
+      );
+
+      updated++;
+
+      result.push({
+        registrationId: registration._id,
+        student: registration.student,
+        oldClassInfo: registration.classInfo,
+        newClassInfo: matchedClass._id,
+        status: "Updated",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Registration class migration completed.",
+      totalRegistrations: registrations.length,
+      updated,
+      notFound,
+      data: result,
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Migration failed.",
+      error: error.message,
+    });
+  }
+});
+
 module.exports = router;
