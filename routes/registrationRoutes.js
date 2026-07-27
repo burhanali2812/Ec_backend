@@ -2,6 +2,7 @@ const express = require("express");
 const Course = require("../modals/Course");
 const Registration = require("../modals/Registration");
 const authMiddleWare = require("../authMiddleWare");
+const Class = require("../modals/Class");
 const router = express.Router();
 
 router.post("/register", authMiddleWare, async (req, res) => {
