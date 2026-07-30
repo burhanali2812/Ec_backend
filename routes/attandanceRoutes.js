@@ -431,11 +431,17 @@ router.post("/updateAttendanceByStudent", authMiddleWare, async (req, res) => {
       });
     }
 
+    const registration = await Registration.findOne({
+      student: studentId,
+      aboutCourse: { $elemMatch: { course: courseId } },
+    });
+
+
  
 
     const updated = await Attendance.findOneAndUpdate(
       {
-        student: studentId,
+        registration: registration._id,
         course: courseId,
         classInfo: classInfo,
         date: date,
