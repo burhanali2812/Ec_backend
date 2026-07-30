@@ -228,6 +228,110 @@ router.get("/studentStats/:courseId", authMiddleWare, async (req, res) => {
   }
 });
 
+router.put("/updateResult/:resultId", authMiddleWare, async (req, res) => {
+  if (req.user.role !== "teacher") {
+    return res.status(403).json({
+      success: false,
+      message: "Only teachers can update results",
+    });
+  }
+  const { resultId } = req.params;
+  const { marksObtained, totalMarks, remarks, date } = req.body;
+  if (
+    marksObtained == null ||
+    totalMarks == null ||
+    !date
+  ) {
+    return res
+      .status(400)
+      .json({
+        message: "Marks obtained, total marks, and date are required",
+        success: false,
+      });
+  } 
+  try {
+    const result = await Result.findById(resultId);
+    if (!result) {
+      return res
+        .status(404)
+        .json({ message: "Result not found", success: false });
+    }
+    result.marksObtained = marksObtained;
+    result.totalMarks = totalMarks;
+    result.remarks = remarks;
+    result.date = date;
+    await result.save();
+    res.json({ message: "Result updated successfully", success: true });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+
+router.get("/getResultsByClass", authMiddleWare, async (req, res) => {
+  if (req.user.role !== "teacher") {
+    return res.status(403).json({
+      success: false,
+      message: "Only teachers can view results by class",
+    });
+  }
+  try {
+    const { courseId, classInfo, date } = req.query;
+
+    if (!courseId || !classInfo || !date) {
+      return res.status(400).json({
+        success: false,
+        message: "courseId, classInfo, and date are all required.",
+      });
+    }
+
+    // Step 1: find which students are registered in this course + class
+    const registrations = await Registration.find({
+      "aboutCourse.course": courseId,
+      classInfo: classInfo,
+    }).select("student");
+
+    const studentIds = registrations.map((r) => r.student);
+
+    if (!studentIds.length) {
+      return res.status(200).json({ success: true, results: [] });
+    }
+
+    // Step 2: build a day range for dateOfExam (stored as a real Date)
+    const startOfDay = new Date(`${date}T00:00:00.000Z`);
+    const endOfDay = new Date(`${date}T23:59:59.999Z`);
+
+    // Step 3: find results for those students, this course, that date
+    const results = await Result.find({
+      course: courseId,
+      student: { $in: studentIds },
+      dateOfExam: { $gte: startOfDay, $lte: endOfDay },
+    }).populate("student", "name rollNumber email");
+
+    // Step 4: flatten for the frontend
+    const flattened = results.map((r) => ({
+      _id: r._id,
+      studentId: r.student?._id,
+      name: r.student?.name,
+      rollNumber: r.student?.rollNumber,
+      email: r.student?.email,
+      marksObtained: r.marksObtained,
+      totalMarks: r.totalMarks,
+      dateOfExam: r.dateOfExam,
+      remarks: r.remarks,
+    }));
+
+    return res.status(200).json({ success: true, results: flattened });
+  } catch (error) {
+    console.error("Error fetching results by class:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+});
+
+
 router.put("/updateRegistration", authMiddleWare, async (req, res) => {
   const { registrationId, courseId } = req.body;
   if (!registrationId || !courseId) {
