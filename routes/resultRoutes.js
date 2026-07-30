@@ -236,11 +236,11 @@ router.put("/updateResult/:resultId", authMiddleWare, async (req, res) => {
     });
   }
   const { resultId } = req.params;
-  const { marksObtained, totalMarks, remarks, date } = req.body;
+  const { marksObtained, totalMarks, remarks, dateOfExam } = req.body;
   if (
     marksObtained == null ||
     totalMarks == null ||
-    !date
+    !dateOfExam
   ) {
     return res
       .status(400)
@@ -259,7 +259,7 @@ router.put("/updateResult/:resultId", authMiddleWare, async (req, res) => {
     result.marksObtained = marksObtained;
     result.totalMarks = totalMarks;
     result.remarks = remarks;
-    result.date = date;
+    result.dateOfExam = dateOfExam;
     await result.save();
     res.json({ message: "Result updated successfully", success: true });
   } catch (error) {
