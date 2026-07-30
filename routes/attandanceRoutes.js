@@ -325,7 +325,7 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
       });
     }
 
-    // ✅ FIXED UTC DATE
+    // FIXED UTC DATE
     const dateObj = new Date(`${date}T00:00:00.000Z`);
 
     const savedRecords = [];
@@ -398,6 +398,70 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
     });
   } catch (error) {
     console.error(error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+});
+
+const ALLOWED_STATUSES = ["present", "absent", "onLeave"];
+router.post("/updateAttendanceByStudent", authMiddleWare, async (req, res) => {
+  if(req.user.role !== "teacher" && Course.assignments.includes(req.user.id) === false){
+    return res.status(403).json({
+      success: false,
+      message: "Unauthorized, Only teachers can update attendance by student",
+    });
+  }
+  try {
+    const { studentId, courseId, classInfo, date, status } = req.body;
+
+    if (!studentId || !courseId || !classInfo || !date || !status) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "studentId, courseId, classInfo, date, and status are all required.",
+      });
+    }
+
+    if (!ALLOWED_STATUSES.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: `status must be one of: ${ALLOWED_STATUSES.join(", ")}`,
+      });
+    }
+
+ 
+
+    const updated = await Attendance.findOneAndUpdate(
+      {
+        student: studentId,
+        course: courseId,
+        classInfo: classInfo,
+        date: date,
+      },
+      {
+        $set: { status },
+        $setOnInsert: {
+          student: studentId,
+          course: courseId,
+          classInfo: classInfo,
+          date: date,
+        },
+      },
+      {
+        upsert: true,
+        new: true,
+      },
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Attendance updated successfully",
+      attendance: updated,
+    });
+  } catch (error) {
+    console.error("Error updating attendance by student:", error);
     return res.status(500).json({
       success: false,
       message: "Server error",
