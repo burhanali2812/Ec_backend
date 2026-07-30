@@ -87,7 +87,7 @@ router.post("/login", async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: "1h" },
     );
-    res.json({ token, success: true, message: "Login successful" });
+    res.json({ token, success: true, message: "Login successful", user: { role: "teacher", email: teacher.email } });
   } catch (error) {
     res.status(500).json({ message: "Server error", success: false });
   }
