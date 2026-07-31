@@ -140,6 +140,11 @@ router.post("/login", async (req, res) => {
       success: true,
       message: "Login successful",
       studentId: student._id,
+      user: {
+        name: student.name,
+        email: student.email,
+        role: "student",
+      },
     });
   } catch (error) {
     res.status(500).json({ message: "Server error", success: false });
