@@ -1,125 +1,61 @@
 const mongoose = require("mongoose");
+const { randomUUID } = require("crypto");
 
 const notificationSchema = new mongoose.Schema(
   {
-    // Who created the notification
-    sender: {
-      id: {
-        type: mongoose.Schema.Types.ObjectId,
-        required: true,
-        refPath: "sender.role",
-      },
-      role: {
-        type: String,
-        enum: ["Admin", "Teacher"],
-        required: true,
-      },
-    },
-
-    // Notification title
     title: {
       type: String,
       required: true,
       trim: true,
     },
 
-    // Notification message
     message: {
       type: String,
       required: true,
       trim: true,
     },
 
-    // Notification category
+    recipient: {
+      id: {
+        type: mongoose.Schema.Types.ObjectId,
+        required: true,
+        refPath: "recipient.role",
+      },
+
+      role: {
+        type: String,
+        enum: ["Student", "Teacher"],
+        required: true,
+      },
+    },
+
     type: {
       type: String,
-      enum: [
-        "Announcement",
-        "Result",
-        "Assignment",
-        "Attendance",
-        "Fee",
-        "General",
-      ],
+      enum: ["Announcement", "Result", "Fee", "General"],
       default: "General",
     },
 
-    // Who should receive it
-    audience: {
+    // Who the announcement was sent to. Stored on every recipient row too
+    // so the admin table can display it without an extra lookup.
+    target: {
       type: String,
-      enum: [
-        "AllStudents",
-        "AllTeachers",
-        "SpecificStudents",
-        "SpecificTeachers",
-        "Class",
-        "Course",
-      ],
+      enum: ["students", "teachers", "both"],
+      default: "both",
+    },
+
+    // Every recipient row created from the same "Create announcement"
+    // action shares this id. This is what lets the admin view treat
+    // hundreds of per-student rows as a single editable/deletable item.
+    groupId: {
+      type: String,
       required: true,
+      default: () => randomUUID(),
+      index: true,
     },
 
-    // Target students
-    students: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Student",
-      },
-    ],
-
-    // Target teachers
-    teachers: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Teacher",
-      },
-    ],
-
-    // Target class
-    classInfo: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Class",
-      default: null,
-    },
-
-    // Target course
-    course: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Course",
-      default: null,
-    },
-
-    // Related document (marks, assignment etc.)
-    referenceId: {
-      type: mongoose.Schema.Types.ObjectId,
-      default: null,
-    },
-
-    referenceModel: {
-      type: String,
-      enum: [
-        "Result",
-        "Assignment",
-        "Attendance",
-        "Registration",
-      ],
-      default: null,
-    },
-
-    // Schedule notification
-    publishAt: {
-      type: Date,
-      default: Date.now,
-    },
-
-    // Expiry
-    expiresAt: {
-      type: Date,
-      default: null,
-    },
-
-    isActive: {
+    isRead: {
       type: Boolean,
-      default: true,
+      default: false,
     },
   },
   {
