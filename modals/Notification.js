@@ -1,5 +1,28 @@
 const mongoose = require("mongoose");
-const { randomUUID } = require("crypto");
+
+const recipientSchema = new mongoose.Schema(
+  {
+    id: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: true,
+      refPath: "recipients.role",
+    },
+    role: {
+      type: String,
+      enum: ["student", "teacher"],
+      required: true,
+    },
+    isRead: {
+      type: Boolean,
+      default: false,
+    },
+    readAt: {
+      type: Date,
+      default: null,
+    },
+  },
+  { _id: false }
+);
 
 const notificationSchema = new mongoose.Schema(
   {
@@ -15,52 +38,43 @@ const notificationSchema = new mongoose.Schema(
       trim: true,
     },
 
-    recipient: {
-      id: {
-        type: mongoose.Schema.Types.ObjectId,
-        required: true,
-        refPath: "recipient.role",
-      },
-
-      role: {
-        type: String,
-        enum: ["Student", "Teacher"],
-        required: true,
-      },
-    },
-
     type: {
       type: String,
-      enum: ["Announcement", "Result", "Fee", "General"],
+      enum: ["Announcement", "Result", "Fee", "General", "Attendance", "Leave"],
       default: "General",
     },
 
-    // Who the announcement was sent to. Stored on every recipient row too
-    // so the admin table can display it without an extra lookup.
+    // Who this was sent to, kept for display in the admin table.
     target: {
       type: String,
       enum: ["students", "teachers", "both"],
-      default: "both",
-    },
-
-    // Every recipient row created from the same "Create announcement"
-    // action shares this id. This is what lets the admin view treat
-    // hundreds of per-student rows as a single editable/deletable item.
-    groupId: {
-      type: String,
       required: true,
-      default: () => randomUUID(),
-      index: true,
     },
 
-    isRead: {
-      type: Boolean,
-      default: false,
+    // One entry per recipient, on a SINGLE document — this is the
+    // whole point of the redesign: 1 announcement = 1 document,
+    // regardless of how many students/teachers it goes to.
+    publishedBy: {
+      type: String,
+      enum: ["admin", "system"],
+      required: true,
+    },
+    recipients: {
+      type: [recipientSchema],
+      required: true,
+      validate: {
+        validator: (arr) => arr.length > 0,
+        message: "An announcement needs at least one recipient.",
+      },
     },
   },
   {
     timestamps: true,
   }
 );
+
+// Lets "give me all notifications for this user" run as an indexed
+// lookup instead of a full collection scan.
+notificationSchema.index({ "recipients.id": 1, "recipients.role": 1 });
 
 module.exports = mongoose.model("Notification", notificationSchema);

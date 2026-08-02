@@ -4,6 +4,7 @@ const Course = require("../modals/Course");
 const authMiddleWare = require("../authMiddleWare");
 const Student = require("../modals/Student");
 const LeaveApplication = require("../modals/LeaveApplication");
+const {notifyLeaveResponse} = require("../notificationService");
 const router = express.Router();
 
 router.post("/applyLeave", authMiddleWare, async (req, res) => {
@@ -42,12 +43,16 @@ router.post("/applyLeave", authMiddleWare, async (req, res) => {
       toDate,
     });
     await newLeaveApplication.save();
+    await notifyLeaveResponse(applicantId, isTeacher ? "teacher" : "student", {
+      status: "pending",
+      adminNote: "Your leave request has been submitted and is awaiting review.",
+    });
     res.json({
       message: "Leave application submitted successfully",
       success: true,
     });
   } catch (error) {
-    res.status(500).json({ message: "Server error", success: false });
+    res.status(500).json({ message: "Server error", success: false , error: error.message});
   }
 });
 
@@ -136,6 +141,20 @@ router.put("/leaveApplications/:id", authMiddleWare, async (req, res) => {
     if (!leaveApplication) {
       return res.status(404).json({ message: "Leave application not found" });
     }
+    await notifyLeaveResponse(
+      leaveApplication.applicant === "Teacher"
+        ? leaveApplication.teacherId
+        : leaveApplication.studentId,
+      leaveApplication.applicant === "Teacher" ? "teacher" : "student",
+      {
+        status: leaveApplication.status === "Approved"
+          ? "approved"
+          : leaveApplication.status === "Rejected"
+          ? "rejected"
+          : "pending",
+        adminNote: leaveApplication.rejectedReason || null,
+      }
+    );
     res.json({
       message: "Leave application updated successfully",
       leaveApplication,

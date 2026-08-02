@@ -4,6 +4,7 @@ const Registration = require("../modals/Registration");
 const Attendance = require("../modals/Attandance");
 const authMiddleWare = require("../authMiddleWare");
 const LeaveApplication = require("../modals/LeaveApplication");
+const {notifyAttendanceUploaded} = require("../notificationService");
 
 const router = express.Router();
 
@@ -387,6 +388,7 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
 
       saved.percentage = percentage;
       await saved.save();
+      await notifyAttendanceUploaded([studentId], { courseName: course.title, date: dateObj.toISOString().split("T")[0] });
 
       savedRecords.push(saved);
     }

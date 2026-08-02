@@ -1,10 +1,10 @@
 const express = require("express");
-const { randomUUID } = require("crypto");
 const router = express.Router();
 
-const Notification = require("../models/Notification");
-const Student = require("../models/Student");
-const Teacher = require("../models/Teacher");
+const Notification = require("../modals/Notification");
+const Student = require("../modals/Student");
+const Teacher = require("../modals/Teacher");
+const authMiddleWare = require("../authMiddleWare");
 
 // NOTE: Plug your existing admin-only auth middleware in front of the
 // three "/admin..." routes below (the same one used on your other
@@ -12,11 +12,34 @@ const Teacher = require("../models/Teacher");
 // Left out here since I don't have your middleware's exact name/path.
 
 /**
- * Create an announcement.
- * Fans out one Notification row per recipient, all sharing a groupId
- * so the admin side can treat them as a single announcement.
+ * Build the recipients array for a given target audience.
+ * One entry per student/teacher — this array lives on a single
+ * Notification document, instead of creating a document per person.
  */
-router.post("/", async (req, res) => {
+async function buildRecipients(target) {
+  let recipients = [];
+
+  if (target === "students" || target === "both") {
+    const students = await Student.find().select("_id");
+    recipients = recipients.concat(
+      students.map((s) => ({ id: s._id, role: "student", isRead: false }))
+    );
+  }
+
+  if (target === "teachers" || target === "both") {
+    const teachers = await Teacher.find().select("_id");
+    recipients = recipients.concat(
+      teachers.map((t) => ({ id: t._id, role: "teacher", isRead: false }))
+    );
+  }
+
+  return recipients;
+}
+
+/**
+ * Create an announcement — ONE document, with a recipients array.
+ */
+router.post("/", authMiddleWare, async (req, res) => {
   try {
     const { title, message, target } = req.body;
 
@@ -34,61 +57,29 @@ router.post("/", async (req, res) => {
       });
     }
 
-    const groupId = randomUUID();
-    let notifications = [];
+    const recipients = await buildRecipients(target);
 
-    // Students
-    if (target === "students" || target === "both") {
-      const students = await Student.find().select("_id");
-
-      students.forEach((student) => {
-        notifications.push({
-          title,
-          message,
-          recipient: {
-            id: student._id,
-            role: "Student",
-          },
-          type: "Announcement",
-          target,
-          groupId,
-        });
-      });
-    }
-
-    // Teachers
-    if (target === "teachers" || target === "both") {
-      const teachers = await Teacher.find().select("_id");
-
-      teachers.forEach((teacher) => {
-        notifications.push({
-          title,
-          message,
-          recipient: {
-            id: teacher._id,
-            role: "Teacher",
-          },
-          type: "Announcement",
-          target,
-          groupId,
-        });
-      });
-    }
-
-    if (notifications.length === 0) {
+    if (recipients.length === 0) {
       return res.status(400).json({
         success: false,
         message: "No recipients found.",
       });
     }
 
-    await Notification.insertMany(notifications);
+    const notification = await Notification.create({
+      title,
+      message,
+      type: "Announcement",
+      target,
+      publishedBy: "admin",
+      recipients,
+    });
 
     return res.status(201).json({
       success: true,
       message: "Notification sent successfully.",
-      count: notifications.length,
-      groupId,
+      id: notification._id,
+      recipientCount: recipients.length,
     });
   } catch (error) {
     console.error("Notification Error:", error);
@@ -101,41 +92,31 @@ router.post("/", async (req, res) => {
 });
 
 /**
- * Admin: list announcements, one row per announcement (not per recipient).
+ * Admin: list announcements (each row = one document now).
  * Supports ?search= to filter by title.
  */
-router.get("/admin", async (req, res) => {
+router.get("/admin", authMiddleWare, async (req, res) => {
   try {
     const { search = "" } = req.query;
+    //fetch only admin published announcements
+    const filter = search
+      ? { title: { $regex: search.trim(), $options: "i" }, publishedBy: "admin" }
+      : { publishedBy: "admin" };
 
-    const match = search
-      ? { title: { $regex: search.trim(), $options: "i" } }
-      : {};
-
-    const groups = await Notification.aggregate([
-      { $match: match },
-      {
-        $group: {
-          _id: "$groupId",
-          title: { $first: "$title" },
-          message: { $first: "$message" },
-          target: { $first: "$target" },
-          createdAt: { $first: "$createdAt" },
-          recipientCount: { $sum: 1 },
-        },
-      },
-      { $sort: { createdAt: -1 } },
-    ]);
+    const notifications = await Notification.find(filter)
+      .select("title message target createdAt recipients")
+      .sort({ createdAt: -1 });
 
     return res.json({
       success: true,
-      announcements: groups.map((g) => ({
-        groupId: g._id,
-        title: g.title,
-        message: g.message,
-        target: g.target,
-        createdAt: g.createdAt,
-        recipientCount: g.recipientCount,
+      announcements: notifications.map((n) => ({
+        id: n._id,
+        title: n.title,
+        message: n.message,
+        target: n.target,
+        publishedBy: n.publishedBy,
+        createdAt: n.createdAt,
+        recipientCount: n.recipients.length,
       })),
     });
   } catch (error) {
@@ -150,15 +131,15 @@ router.get("/admin", async (req, res) => {
 
 /**
  * Admin: edit an announcement.
- * If the audience (target) is unchanged, just updates title/message on
- * every row in the group, preserving each recipient's read state.
- * If the audience changed, recipients have to be recomputed, so the
- * old rows are replaced with a fresh set (read state resets for this
- * announcement only).
+ * If the audience (target) is unchanged, just updates title/message —
+ * every recipient keeps their existing read state.
+ * If the audience changed, the recipients array has to be rebuilt,
+ * which resets read state for this announcement (unavoidable, since
+ * the set of people it applies to has changed).
  */
-router.put("/admin/:groupId", async (req, res) => {
+router.put("/admin/:id", authMiddleWare, async (req, res) => {
   try {
-    const { groupId } = req.params;
+    const { id } = req.params;
     const { title, message, target } = req.body;
 
     if (!title || !message || !target) {
@@ -175,7 +156,7 @@ router.put("/admin/:groupId", async (req, res) => {
       });
     }
 
-    const existing = await Notification.findOne({ groupId });
+    const existing = await Notification.findById(id);
 
     if (!existing) {
       return res.status(404).json({
@@ -185,7 +166,9 @@ router.put("/admin/:groupId", async (req, res) => {
     }
 
     if (existing.target === target) {
-      await Notification.updateMany({ groupId }, { title, message });
+      existing.title = title;
+      existing.message = message;
+      await existing.save();
 
       return res.json({
         success: true,
@@ -193,47 +176,21 @@ router.put("/admin/:groupId", async (req, res) => {
       });
     }
 
-    // Audience changed — rebuild the recipient list from scratch.
-    await Notification.deleteMany({ groupId });
+    // Audience changed — rebuild the recipients array.
+    const recipients = await buildRecipients(target);
 
-    let notifications = [];
-
-    if (target === "students" || target === "both") {
-      const students = await Student.find().select("_id");
-      students.forEach((student) => {
-        notifications.push({
-          title,
-          message,
-          recipient: { id: student._id, role: "Student" },
-          type: "Announcement",
-          target,
-          groupId,
-        });
-      });
-    }
-
-    if (target === "teachers" || target === "both") {
-      const teachers = await Teacher.find().select("_id");
-      teachers.forEach((teacher) => {
-        notifications.push({
-          title,
-          message,
-          recipient: { id: teacher._id, role: "Teacher" },
-          type: "Announcement",
-          target,
-          groupId,
-        });
-      });
-    }
-
-    if (notifications.length === 0) {
+    if (recipients.length === 0) {
       return res.status(400).json({
         success: false,
         message: "No recipients found for the selected audience.",
       });
     }
 
-    await Notification.insertMany(notifications);
+    existing.title = title;
+    existing.message = message;
+    existing.target = target;
+    existing.recipients = recipients;
+    await existing.save();
 
     return res.json({
       success: true,
@@ -250,15 +207,13 @@ router.put("/admin/:groupId", async (req, res) => {
 });
 
 /**
- * Admin: delete an announcement (all recipient rows in the group).
+ * Admin: delete an announcement (single document — no cleanup needed).
  */
-router.delete("/admin/:groupId", async (req, res) => {
+router.delete("/admin/:id", authMiddleWare, async (req, res) => {
   try {
-    const result = await Notification.deleteMany({
-      groupId: req.params.groupId,
-    });
+    const deleted = await Notification.findByIdAndDelete(req.params.id);
 
-    if (result.deletedCount === 0) {
+    if (!deleted) {
       return res.status(404).json({
         success: false,
         message: "Announcement not found.",
@@ -281,17 +236,39 @@ router.delete("/admin/:groupId", async (req, res) => {
 
 /**
  * Student/Teacher: get my own notifications.
+ * Finds documents where I'm listed in the recipients array, then
+ * flattens each one down to just my own isRead status — the caller
+ * never sees anyone else's recipient data.
  */
-router.get("/", async (req, res) => {
+router.get("/", authMiddleWare, async (req, res) => {
+  
   try {
     const notifications = await Notification.find({
-      "recipient.id": req.user.id,
-      "recipient.role": req.user.role,
-    }).sort({ createdAt: -1 });
+      recipients: {
+        $elemMatch: { id: req.user.id, role: req.user.role },
+      },
+    })
+      .select("title message type createdAt recipients")
+      .sort({ createdAt: -1 });
+
+    const mine = notifications.map((n) => {
+      const myEntry = n.recipients.find(
+        (r) => String(r.id) === String(req.user.id) && r.role === req.user.role
+      );
+
+      return {
+        _id: n._id,
+        title: n.title,
+        message: n.message,
+        type: n.type,
+        createdAt: n.createdAt,
+        isRead: myEntry ? myEntry.isRead : false,
+      };
+    });
 
     res.json({
       success: true,
-      notifications,
+      notifications: mine,
     });
   } catch (error) {
     console.error(error);
@@ -303,23 +280,30 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.patch("/:id/read", async (req, res) => {
+/**
+ * Mark one notification as read, for the current user only —
+ * updates just their entry inside the recipients array.
+ */
+router.patch("/:id/read",   authMiddleWare, async (req, res) => {
   try {
-    const notification = await Notification.findOneAndUpdate(
+    const result = await Notification.findOneAndUpdate(
       {
         _id: req.params.id,
-        "recipient.id": req.user.id,
-        "recipient.role": req.user.role,
+        recipients: { $elemMatch: { id: req.user.id, role: req.user.role } },
       },
       {
-        isRead: true,
+        $set: {
+          "recipients.$[elem].isRead": true,
+          "recipients.$[elem].readAt": new Date(),
+        },
       },
       {
+        arrayFilters: [{ "elem.id": req.user.id, "elem.role": req.user.role }],
         new: true,
       }
     );
 
-    if (!notification) {
+    if (!result) {
       return res.status(404).json({
         success: false,
         message: "Notification not found.",
@@ -329,7 +313,6 @@ router.patch("/:id/read", async (req, res) => {
     res.json({
       success: true,
       message: "Notification marked as read.",
-      notification,
     });
   } catch (error) {
     res.status(500).json({
@@ -339,22 +322,66 @@ router.patch("/:id/read", async (req, res) => {
   }
 });
 
-router.patch("/read-all", async (req, res) => {
+/**
+ * Mark all of the current user's unread notifications as read.
+ */
+router.patch("/read-all", authMiddleWare, async (req, res) => {
   try {
     await Notification.updateMany(
       {
-        "recipient.id": req.user.id,
-        "recipient.role": req.user.role,
-        isRead: false,
+        recipients: {
+          $elemMatch: { id: req.user.id, role: req.user.role, isRead: false },
+        },
       },
       {
-        isRead: true,
+        $set: {
+          "recipients.$[elem].isRead": true,
+          "recipients.$[elem].readAt": new Date(),
+        },
+      },
+      {
+        arrayFilters: [{ "elem.id": req.user.id, "elem.role": req.user.role }],
       }
     );
 
     res.json({
       success: true,
       message: "All notifications marked as read.",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Server error.",
+    });
+  }
+});
+router.delete("/:id", authMiddleWare, async (req, res) => {
+  try {
+    const notification = await Notification.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        recipients: { $elemMatch: { id: req.user.id, role: req.user.role } },
+      },
+      {
+        $pull: { recipients: { id: req.user.id, role: req.user.role } },
+      },
+      { new: true }
+    );
+ 
+    if (!notification) {
+      return res.status(404).json({
+        success: false,
+        message: "Notification not found.",
+      });
+    }
+ 
+    if (notification.recipients.length === 0) {
+      await Notification.findByIdAndDelete(notification._id);
+    }
+ 
+    res.json({
+      success: true,
+      message: "Notification deleted.",
     });
   } catch (error) {
     res.status(500).json({

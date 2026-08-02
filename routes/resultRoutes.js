@@ -4,7 +4,8 @@ const Student = require("../modals/Student");
 const Registration = require("../modals/Registration");
 const Result = require("../modals/Result");
 const authMiddleWare = require("../authMiddleWare");
-
+const {notifyResultUploaded} = require("../notificationService");
+const Course = require("../modals/Course");
 router.post("/submitResult", authMiddleWare, async (req, res) => {
   const {
     studentId,
@@ -53,6 +54,8 @@ router.post("/submitResult", authMiddleWare, async (req, res) => {
       remarks,
     });
     await newResult.save();
+    const course = await Course.findById(courseId);
+    await notifyResultUploaded([studentId], { courseName: course.title , dateOfExam: dateOfExam});
     res.json({ message: "Result submitted successfully", success: true });
   } catch (error) {
     res.status(500).json({ message: "Server error", success: false });
@@ -268,6 +271,14 @@ router.put("/updateResult/:resultId", authMiddleWare, async (req, res) => {
 });
 
 
+// getResultsByClass:
+// - courseId and classInfo are required.
+// - `date` is now OPTIONAL. When omitted, ALL results for that course+class
+//   are returned (across every exam date) so the frontend can group them by
+//   date and let the teacher filter client-side.
+// - When `date` is provided, results are additionally narrowed to that day
+//   (kept for backward compatibility / future use), but the default edit
+//   flow no longer sends it on the initial fetch.
 router.get("/getResultsByClass", authMiddleWare, async (req, res) => {
   if (req.user.role !== "teacher") {
     return res.status(403).json({
@@ -278,10 +289,10 @@ router.get("/getResultsByClass", authMiddleWare, async (req, res) => {
   try {
     const { courseId, classInfo, date } = req.query;
 
-    if (!courseId || !classInfo || !date) {
+    if (!courseId || !classInfo) {
       return res.status(400).json({
         success: false,
-        message: "courseId, classInfo, and date are all required.",
+        message: "courseId and classInfo are required.",
       });
     }
 
@@ -297,16 +308,25 @@ router.get("/getResultsByClass", authMiddleWare, async (req, res) => {
       return res.status(200).json({ success: true, results: [] });
     }
 
-    // Step 2: build a day range for dateOfExam (stored as a real Date)
-    const startOfDay = new Date(`${date}T00:00:00.000Z`);
-    const endOfDay = new Date(`${date}T23:59:59.999Z`);
-
-    // Step 3: find results for those students, this course, that date
-    const results = await Result.find({
+    // Step 2: build the query. Date range is only applied if a date was
+    // explicitly passed in — otherwise we fetch every result for this
+    // course + class so they can be grouped by date on the frontend.
+    const query = {
       course: courseId,
       student: { $in: studentIds },
-      dateOfExam: { $gte: startOfDay, $lte: endOfDay },
-    }).populate("student", "name rollNumber email");
+    };
+
+    if (date) {
+      const startOfDay = new Date(`${date}T00:00:00.000Z`);
+      const endOfDay = new Date(`${date}T23:59:59.999Z`);
+      query.dateOfExam = { $gte: startOfDay, $lte: endOfDay };
+    }
+
+    // Step 3: find results for those students, this course (all dates
+    // unless a date filter was passed), most recent exam first.
+    const results = await Result.find(query)
+      .populate("student", "name rollNumber email")
+      .sort({ dateOfExam: -1 });
 
     // Step 4: flatten for the frontend
     const flattened = results.map((r) => ({

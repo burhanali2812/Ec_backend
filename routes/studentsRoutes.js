@@ -177,6 +177,7 @@ router.get("/getAllStudents", authMiddleWare, async (req, res) => {
   try {
     const students = await Student.find({
       institutionType: institutionType,
+      isActive: true, // Only fetch active students
     }).select("-password");
     if (students.length === 0) {
       return res.status(404).json({
@@ -218,19 +219,38 @@ router.get("/myProfile", authMiddleWare, async (req, res) => {
   }
 });
 
-router.delete("/deleteStudent/:id", authMiddleWare, async (req, res) => {
+// router.delete("/deleteStudent/:id", authMiddleWare, async (req, res) => {
+//   try {
+//     const studentId = req.params.id;
+//     const student = await Student.findByIdAndDelete(studentId);
+//     if (!student) {
+//       return res
+//         .status(404)
+//         .json({ message: "Student not found", success: false });
+//     }
+
+//     await Registration.deleteMany({ student: studentId });
+
+//     res.json({ message: "Student deleted successfully", success: true });
+//   } catch (error) {
+//     res.status(500).json({ message: "Server error", success: false });
+//   }
+// });
+
+router.put("/deleteStudent/:id", authMiddleWare, async (req, res) => {
   try {
     const studentId = req.params.id;
-    const student = await Student.findByIdAndDelete(studentId);
+    const student = await Student.findByIdAndUpdate(
+      studentId,
+      { isActive: false },
+      { new: true }
+    ).select("-password");
     if (!student) {
       return res
         .status(404)
         .json({ message: "Student not found", success: false });
     }
-
-    await Registration.deleteMany({ student: studentId });
-
-    res.json({ message: "Student deleted successfully", success: true });
+    res.json({ message: "Student deactivated successfully", success: true });
   } catch (error) {
     res.status(500).json({ message: "Server error", success: false });
   }
