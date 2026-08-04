@@ -40,9 +40,18 @@ const notificationSchema = new mongoose.Schema(
 
     type: {
       type: String,
-      enum: ["Announcement", "Result", "Fee", "General", "Attendance", "Leave"],
+      enum: ["Announcement", "Result", "Fee", "General", "Attendance", "Leave", "Holiday"],
       default: "General",
     },
+    date:{
+      from: {
+        type: Date,
+      },
+      to: {
+        type: Date,
+      },
+    },
+   
 
     // Who this was sent to, kept for display in the admin table.
     target: {

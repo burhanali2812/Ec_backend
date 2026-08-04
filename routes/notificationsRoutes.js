@@ -11,6 +11,8 @@ const authMiddleWare = require("../authMiddleWare");
 // admin routes), so only admins can create/edit/delete announcements.
 // Left out here since I don't have your middleware's exact name/path.
 
+const VALID_TYPES = ["Announcement", "Result", "Fee", "General", "Attendance", "Leave", "Holiday"];
+
 /**
  * Build the recipients array for a given target audience.
  * One entry per student/teacher — this array lives on a single
@@ -37,16 +39,40 @@ async function buildRecipients(target) {
 }
 
 /**
+ * Validates the { from, to } date range required for Holiday notifications.
+ * Returns an error message string, or null if valid.
+ */
+function validateHolidayDateRange(date) {
+  if (!date || !date.from || !date.to) {
+    return "A start and end date are required for a holiday.";
+  }
+  if (date.to < date.from) {
+    return "End date cannot be before the start date.";
+  }
+  return null;
+}
+
+/**
  * Create an announcement — ONE document, with a recipients array.
  */
 router.post("/", authMiddleWare, async (req, res) => {
   try {
-    const { title, message, target } = req.body;
+    const { title, message, target, date, type } = req.body;
 
-    if (!title || !message || !target) {
+    // Fixed: the original check used a comma (`, !type`) instead of
+    // `||`, which meant only `!type` was ever actually evaluated —
+    // title/message/target were never checked.
+    if (!title || !message || !target || !type) {
       return res.status(400).json({
         success: false,
-        message: "Title, message and target are required.",
+        message: "Title, message, type, and target are required.",
+      });
+    }
+
+    if (!VALID_TYPES.includes(type)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid type.",
       });
     }
 
@@ -55,6 +81,18 @@ router.post("/", authMiddleWare, async (req, res) => {
         success: false,
         message: "Invalid target.",
       });
+    }
+
+    // Date range only applies to Holiday notifications — a plain
+    // announcement has no date range, so it's no longer required
+    // unconditionally.
+    let dateRange = undefined;
+    if (type === "Holiday") {
+      const dateError = validateHolidayDateRange(date);
+      if (dateError) {
+        return res.status(400).json({ success: false, message: dateError });
+      }
+      dateRange = { from: date.from, to: date.to };
     }
 
     const recipients = await buildRecipients(target);
@@ -69,8 +107,9 @@ router.post("/", authMiddleWare, async (req, res) => {
     const notification = await Notification.create({
       title,
       message,
-      type: "Announcement",
+      type,
       target,
+      date: dateRange,
       publishedBy: "admin",
       recipients,
     });
@@ -93,18 +132,20 @@ router.post("/", authMiddleWare, async (req, res) => {
 
 /**
  * Admin: list announcements (each row = one document now).
+ * Only shows admin-published notifications — system-generated ones
+ * (Result/Fee/Leave/Attendance) don't clutter this table.
  * Supports ?search= to filter by title.
  */
 router.get("/admin", authMiddleWare, async (req, res) => {
   try {
     const { search = "" } = req.query;
-    //fetch only admin published announcements
+
     const filter = search
       ? { title: { $regex: search.trim(), $options: "i" }, publishedBy: "admin" }
       : { publishedBy: "admin" };
 
     const notifications = await Notification.find(filter)
-      .select("title message target createdAt recipients")
+      .select("title message type target date createdAt recipients")
       .sort({ createdAt: -1 });
 
     return res.json({
@@ -113,7 +154,9 @@ router.get("/admin", authMiddleWare, async (req, res) => {
         id: n._id,
         title: n.title,
         message: n.message,
+        type: n.type,
         target: n.target,
+        date: n.date,
         publishedBy: n.publishedBy,
         createdAt: n.createdAt,
         recipientCount: n.recipients.length,
@@ -131,21 +174,28 @@ router.get("/admin", authMiddleWare, async (req, res) => {
 
 /**
  * Admin: edit an announcement.
- * If the audience (target) is unchanged, just updates title/message —
- * every recipient keeps their existing read state.
- * If the audience changed, the recipients array has to be rebuilt,
- * which resets read state for this announcement (unavoidable, since
- * the set of people it applies to has changed).
+ * Now also handles type + date, so a notification's type (e.g. plain
+ * Announcement -> Holiday) and its date range can be changed too.
+ * If the audience (target) is unchanged, recipients keep their read
+ * state. If it changed, the recipients array is rebuilt (read state
+ * resets — unavoidable, since the set of people it applies to changed).
  */
 router.put("/admin/:id", authMiddleWare, async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, message, target } = req.body;
+    const { title, message, target, date, type } = req.body;
 
-    if (!title || !message || !target) {
+    if (!title || !message || !target || !type) {
       return res.status(400).json({
         success: false,
-        message: "Title, message and target are required.",
+        message: "Title, message, type, and target are required.",
+      });
+    }
+
+    if (!VALID_TYPES.includes(type)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid type.",
       });
     }
 
@@ -154,6 +204,15 @@ router.put("/admin/:id", authMiddleWare, async (req, res) => {
         success: false,
         message: "Invalid target.",
       });
+    }
+
+    let dateRange = undefined;
+    if (type === "Holiday") {
+      const dateError = validateHolidayDateRange(date);
+      if (dateError) {
+        return res.status(400).json({ success: false, message: dateError });
+      }
+      dateRange = { from: date.from, to: date.to };
     }
 
     const existing = await Notification.findById(id);
@@ -165,9 +224,12 @@ router.put("/admin/:id", authMiddleWare, async (req, res) => {
       });
     }
 
+    existing.title = title;
+    existing.message = message;
+    existing.type = type;
+    existing.date = dateRange;
+
     if (existing.target === target) {
-      existing.title = title;
-      existing.message = message;
       await existing.save();
 
       return res.json({
@@ -186,8 +248,6 @@ router.put("/admin/:id", authMiddleWare, async (req, res) => {
       });
     }
 
-    existing.title = title;
-    existing.message = message;
     existing.target = target;
     existing.recipients = recipients;
     await existing.save();
@@ -241,14 +301,13 @@ router.delete("/admin/:id", authMiddleWare, async (req, res) => {
  * never sees anyone else's recipient data.
  */
 router.get("/", authMiddleWare, async (req, res) => {
-  
   try {
     const notifications = await Notification.find({
       recipients: {
         $elemMatch: { id: req.user.id, role: req.user.role },
       },
     })
-      .select("title message type createdAt recipients")
+      .select("title message type date createdAt recipients")
       .sort({ createdAt: -1 });
 
     const mine = notifications.map((n) => {
@@ -261,6 +320,7 @@ router.get("/", authMiddleWare, async (req, res) => {
         title: n.title,
         message: n.message,
         type: n.type,
+        date: n.date,
         createdAt: n.createdAt,
         isRead: myEntry ? myEntry.isRead : false,
       };
@@ -284,7 +344,7 @@ router.get("/", authMiddleWare, async (req, res) => {
  * Mark one notification as read, for the current user only —
  * updates just their entry inside the recipients array.
  */
-router.patch("/:id/read",   authMiddleWare, async (req, res) => {
+router.patch("/:id/read", authMiddleWare, async (req, res) => {
   try {
     const result = await Notification.findOneAndUpdate(
       {
@@ -355,6 +415,12 @@ router.patch("/read-all", authMiddleWare, async (req, res) => {
     });
   }
 });
+
+/**
+ * Delete a notification for the current user only — pulls just their
+ * entry out of the recipients array. Other recipients keep their copy.
+ * If they were the last recipient left, the whole document is removed.
+ */
 router.delete("/:id", authMiddleWare, async (req, res) => {
   try {
     const notification = await Notification.findOneAndUpdate(
@@ -367,18 +433,18 @@ router.delete("/:id", authMiddleWare, async (req, res) => {
       },
       { new: true }
     );
- 
+
     if (!notification) {
       return res.status(404).json({
         success: false,
         message: "Notification not found.",
       });
     }
- 
+
     if (notification.recipients.length === 0) {
       await Notification.findByIdAndDelete(notification._id);
     }
- 
+
     res.json({
       success: true,
       message: "Notification deleted.",
