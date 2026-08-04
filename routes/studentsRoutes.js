@@ -253,6 +253,16 @@ router.put("/deleteStudent/:id", authMiddleWare, async (req, res) => {
     res.json({ message: "Student deactivated successfully", success: true });
   } catch (error) {
     res.status(500).json({ message: "Server error", success: false });
+
+  }
+});
+//add isActive in old records of all students collection
+router.put("/addIsActiveToAllStudents", async (req, res) => {
+  try {
+    const students = await Student.updateMany({}, { isActive: true });
+    res.json({ message: "isActive added to all students", success: true });
+  } catch (error) {
+    res.status(500).json({ message: "Server error", success: false });
   }
 });
 
