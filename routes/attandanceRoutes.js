@@ -2,6 +2,7 @@ const express = require("express");
 const Course = require("../modals/Course");
 const Registration = require("../modals/Registration");
 const Attendance = require("../modals/Attandance");
+const Notification = require("../modals/Notification");
 const authMiddleWare = require("../authMiddleWare");
 const LeaveApplication = require("../modals/LeaveApplication");
 const {notifyAttendanceUploaded} = require("../notificationService");
@@ -12,6 +13,31 @@ const findTeacherAssignment = (course, teacherId) => {
   return (course.assignments || []).find(
     (item) => String(item?.teacher?._id || item?.teacher) === String(teacherId),
   );
+};
+
+/**
+ * True if the given "YYYY-MM-DD" date string falls on a Sunday.
+ * Parsed as UTC midnight to match how every other date in this file
+ * is constructed (see `new Date(`${date}T00:00:00.000Z`)` below).
+ */
+const isSundayDate = (dateStr) => {
+  const d = new Date(`${dateStr}T00:00:00.000Z`);
+  return d.getUTCDay() === 0;
+};
+
+/**
+ * Looks up whether the given "YYYY-MM-DD" date falls inside an active
+ * Holiday notification. Holidays are stored as Notification documents
+ * with type: "Holiday" and a { from, to } date range (see
+ * notificationRoutes.js / CreateAnnouncement.jsx).
+ */
+const findHolidayForDate = async (dateStr) => {
+  const dateObj = new Date(`${dateStr}T00:00:00.000Z`);
+  return Notification.findOne({
+    type: "Holiday",
+    "date.from": { $lte: dateObj },
+    "date.to": { $gte: dateObj },
+  }).select("title message date");
 };
 
 router.get("/myCourses", authMiddleWare, async (req, res) => {
@@ -56,46 +82,6 @@ router.get("/classes/:courseId", authMiddleWare, async (req, res) => {
     return res.status(500).json({ success: false, message: "Server error" });
   }
 });
-// router.patch("/migrate-classinfo", async (req, res) => {
-//   try {
-
-//     // Find records missing classInfo
-//     const records = await Attendance.find({
-//       $or: [
-//         { classInfo: { $exists: false } },
-//         { classInfo: null },
-//         { classInfo: "" },
-//       ],
-//     }).populate("registration", "classInfo");
-
-//     let updatedCount = 0;
-//     let skipped = 0;
-
-//     for (const rec of records) {
-//       if (rec.registration && rec.registration.classInfo) {
-//         rec.classInfo = rec.registration.classInfo;
-//         await rec.save();
-//         updatedCount++;
-//       } else {
-//         skipped++;
-//       }
-//     }
-
-//     return res.json({
-//       success: true,
-//       message: "Migration completed",
-//       totalFound: records.length,
-//       updated: updatedCount,
-//       skipped,
-//     });
-//   } catch (error) {
-//     console.error("Migration error:", error);
-//     return res.status(500).json({
-//       success: false,
-//       message: "Migration failed",
-//     });
-//   }
-// });
 
 router.get("/session", authMiddleWare, async (req, res) => {
   try {
@@ -109,6 +95,34 @@ router.get("/session", authMiddleWare, async (req, res) => {
     }
 
     classInfo = String(classInfo).trim();
+
+    // Restriction only applies to the actual "mark attendance" flow.
+    // TeacherPanel's daily-status widget also hits this endpoint with a
+    // different fetchedBy value (teacherDailyAttendanceCheck) and needs
+    // to keep working normally on Sundays/holidays for its own display.
+    if (fetchedBy === "teacherForMarkAttendance") {
+      if (isSundayDate(date)) {
+        return res.status(400).json({
+          success: false,
+          message: "Today is Sunday. Attendance cannot be marked.",
+          blockedReason: "sunday",
+        });
+      }
+
+      const holiday = await findHolidayForDate(date);
+      if (holiday) {
+        return res.status(400).json({
+          success: false,
+          message: `Attendance cannot be marked — ${holiday.title} (holiday).`,
+          blockedReason: "holiday",
+          holiday: {
+            title: holiday.title,
+            from: holiday.date?.from,
+            to: holiday.date?.to,
+          },
+        });
+      }
+    }
 
     const dateObj = new Date(`${date}T00:00:00.000Z`);
 
@@ -294,6 +308,30 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
         success: false,
         message:
           "courseId, classInfo, date, topic and studentStatuses are required",
+      });
+    }
+
+    // Same restriction as /session — enforced here too so a direct API
+    // call (bypassing the UI) can't slip past the Sunday/holiday block.
+    if (isSundayDate(date)) {
+      return res.status(400).json({
+        success: false,
+        message: "Attendance cannot be marked on Sunday.",
+        blockedReason: "sunday",
+      });
+    }
+
+    const holiday = await findHolidayForDate(date);
+    if (holiday) {
+      return res.status(400).json({
+        success: false,
+        message: `Attendance cannot be marked — ${holiday.title} (holiday).`,
+        blockedReason: "holiday",
+        holiday: {
+          title: holiday.title,
+          from: holiday.date?.from,
+          to: holiday.date?.to,
+        },
       });
     }
 
@@ -1067,71 +1105,5 @@ router.put(
     }
   },
 );
-
-// router.put("/fix-attendance-dates", async (req, res) => {
-//   try {
-//     const records = await Attendance.find();
-
-//     let updatedCount = 0;
-//     let deletedDuplicates = 0;
-
-//     for (const record of records) {
-//       const oldDate = new Date(record.date);
-
-//       // Add 1 day
-//       oldDate.setDate(oldDate.getDate() + 1);
-
-//       // Normalize UTC midnight
-//       const correctedDate = new Date(
-//         `${oldDate.toISOString().split("T")[0]}T00:00:00.000Z`
-//       );
-
-//       // Check if corrected record already exists
-//       const existing = await Attendance.findOne({
-//         _id: { $ne: record._id },
-//         registration: record.registration,
-//         course: record.course,
-//         date: correctedDate,
-//       });
-
-//       if (existing) {
-//         // Duplicate would happen -> delete old wrong record
-//         await Attendance.findByIdAndDelete(record._id);
-
-//         deletedDuplicates++;
-
-//         console.log(
-//           `Deleted duplicate record: ${record._id}`
-//         );
-//       } else {
-//         // Safe to update
-//         record.date = correctedDate;
-
-//         await record.save();
-
-//         updatedCount++;
-
-//         console.log(
-//           `Updated: ${record._id}`
-//         );
-//       }
-//     }
-
-//     return res.status(200).json({
-//       success: true,
-//       message: "Attendance dates fixed successfully",
-//       updatedCount,
-//       deletedDuplicates,
-//     });
-//   } catch (error) {
-//     console.error("FIX DATE ERROR:", error);
-
-//     return res.status(500).json({
-//       success: false,
-//       message: "Server error",
-//       error: error.message,
-//     });
-//   }
-// });
 
 module.exports = router;

