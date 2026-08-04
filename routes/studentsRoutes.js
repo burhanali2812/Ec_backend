@@ -177,7 +177,7 @@ router.get("/getAllStudents", authMiddleWare, async (req, res) => {
   try {
     const students = await Student.find({
       institutionType: institutionType,
-      // isActive: true, // Only fetch active students
+       isActive: true, // Only fetch active students
     }).select("-password");
     if (students.length === 0) {
       return res.status(404).json({
