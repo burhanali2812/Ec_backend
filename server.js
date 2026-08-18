@@ -37,6 +37,7 @@ app.use("/api/timetable", require("./routes/timeTableRoutes"));
 app.use("/api/results", require("./routes/resultRoutes"));
 app.use("/api/classes", require("./routes/classRoutes"));
 app.use("/api/notifications", require("./routes/notificationsRoutes"));
+app.use("/api/testScheduleAndSyllabus", require("./routes/testShaduleRoutes"));
 
 const Registration = require("./modals/Registration");
 const StudentFee = require("./modals/StudentFee");
