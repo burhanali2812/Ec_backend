@@ -14,13 +14,15 @@ router.post("/submitResult", authMiddleWare, async (req, res) => {
     dateOfExam,
     totalMarks,
     remarks,
+    topic
   } = req.body;
   if (
     !studentId ||
     !courseId ||
     marksObtained == null ||
     !dateOfExam ||
-    totalMarks == null
+    totalMarks == null ||
+    !topic
   ) {
     return res
       .status(400)
@@ -51,6 +53,7 @@ router.post("/submitResult", authMiddleWare, async (req, res) => {
       marksObtained: marks,
       dateOfExam,
       totalMarks: total,
+      topic,
       remarks,
     });
     await newResult.save();
@@ -103,7 +106,7 @@ router.get("/studentStats/:courseId", authMiddleWare, async (req, res) => {
       student: studentId,
       course: courseId,
     })
-      .select("dateOfExam marksObtained totalMarks remarks")
+      .select("dateOfExam marksObtained totalMarks remarks topic")
       .sort({ dateOfExam: -1 });
 
     const totalExams = resultDocs.length;
@@ -130,6 +133,7 @@ router.get("/studentStats/:courseId", authMiddleWare, async (req, res) => {
           totalMarks: total,
           percentage: total > 0 ? Math.round((obtained / total) * 100) : 0,
           remarks: doc.remarks || "",
+          topic: doc.topic || "",
         };
       });
 
@@ -161,6 +165,7 @@ router.get("/studentStats/:courseId", authMiddleWare, async (req, res) => {
         totalMarks: total,
         percentage: total > 0 ? Math.round((obtained / total) * 100) : 0,
         remarks: doc.remarks || "",
+        topic: doc.topic || "",
         dayLabel: dateObj.toLocaleDateString("en-GB", { day: "2-digit" }),
       });
 
@@ -239,11 +244,12 @@ router.put("/updateResult/:resultId", authMiddleWare, async (req, res) => {
     });
   }
   const { resultId } = req.params;
-  const { marksObtained, totalMarks, remarks, dateOfExam } = req.body;
+  const { marksObtained, totalMarks, remarks, dateOfExam , topic} = req.body;
   if (
     marksObtained == null ||
     totalMarks == null ||
-    !dateOfExam
+    !dateOfExam ||
+    !topic
   ) {
     return res
       .status(400)
@@ -263,6 +269,7 @@ router.put("/updateResult/:resultId", authMiddleWare, async (req, res) => {
     result.totalMarks = totalMarks;
     result.remarks = remarks;
     result.dateOfExam = dateOfExam;
+    result.topic = topic;
     await result.save();
     res.json({ message: "Result updated successfully", success: true });
   } catch (error) {
@@ -337,6 +344,7 @@ router.get("/getResultsByClass", authMiddleWare, async (req, res) => {
       email: r.student?.email,
       marksObtained: r.marksObtained,
       totalMarks: r.totalMarks,
+      topic: r.topic,
       dateOfExam: r.dateOfExam,
       remarks: r.remarks,
     }));

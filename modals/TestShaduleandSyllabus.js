@@ -15,6 +15,10 @@ const testScheduleAndSyllabusSchema = new mongoose.Schema(
         syllabus: {
             type: String,
         },
+        title: {
+            type: String,
+            required: true,
+        },
         testDay: {
             type: String,
             enum: [
@@ -25,6 +29,10 @@ const testScheduleAndSyllabusSchema = new mongoose.Schema(
                 "Friday",
                 "Saturday",
             ],
+            required: true,
+        },
+        testDate: {
+            type: Date,
             required: true,
         },
         syllabusUpdatedAt: {

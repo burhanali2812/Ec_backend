@@ -14,6 +14,7 @@ const resultSchema = new mongoose.Schema(
     },
     marksObtained: { type: Number, required: true },
     dateOfExam: { type: Date, required: true },
+    topic: { type: String, required: true },
     totalMarks: { type: Number, required: true },
     remarks: { type: String },
   },
