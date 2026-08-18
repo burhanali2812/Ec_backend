@@ -122,7 +122,7 @@ router.post("/addBulkTestSchedule", authMiddleWare, async (req, res) => {
         const created = await TestScheduleAndSyllabus.insertMany(docs);
         res.status(201).json({ message: "Test schedule added successfully", created });
     } catch (error) {
-        res.status(500).json({ message: "Server error" });
+        res.status(500).json({ message: "Server error", error });
     }
 });
 
