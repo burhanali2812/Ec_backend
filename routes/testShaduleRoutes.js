@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const Course = require("../modals/Course");
-const TestScheduleAndSyllabus = require("../modals/TestShaduleandSyllabus");
+const TestShaduleandSyllabus = require("../modals/TestShaduleandSyllabus");
 const authMiddleWare = require("../authMiddleWare");
 
 // ---------------------------------------------------------------------
@@ -16,8 +16,14 @@ router.post("/addTestScheduleByAdmin", authMiddleWare, async (req, res) => {
     }
     const { classInfo, title, schedules } = req.body;
 
-    if (!classInfo || !title || !Array.isArray(schedules) || schedules.length === 0) {
-        return res.status(400).json({ message: "Class, title, and at least one schedule entry are required" });
+    if (!classInfo ) {
+        return res.status(400).json({ message: "Class entry is required" });
+    }
+    if (!title) {
+        return res.status(400).json({ message: "Title is required" });
+    }
+    if (!Array.isArray(schedules) || !schedules.length) {
+        return res.status(400).json({ message: "Schedules array is required" });
     }
 
     const invalid = schedules.find(
@@ -35,7 +41,7 @@ router.post("/addTestScheduleByAdmin", authMiddleWare, async (req, res) => {
             return res.status(404).json({ message: "One or more courses not found" });
         }
 
-        const newSheet = new TestScheduleAndSyllabus({
+        const newSheet = new TestShaduleandSyllabus({
             classInfo,
             title,
             schedules: schedules.map((s) => ({
@@ -48,7 +54,7 @@ router.post("/addTestScheduleByAdmin", authMiddleWare, async (req, res) => {
         await newSheet.save();
         res.status(201).json({ message: "Test schedule added successfully", sheet: newSheet });
     } catch (error) {
-        res.status(500).json({ message: "Server error" });
+        res.status(500).json({ message:  error.message});
     }
 });
 
@@ -65,7 +71,7 @@ router.put("/updateTestSchedule/:id", authMiddleWare, async (req, res) => {
         return res.status(400).json({ message: "Provide title and/or classInfo to update" });
     }
     try {
-        const sheet = await TestScheduleAndSyllabus.findById(req.params.id);
+        const sheet = await TestShaduleandSyllabus.findById(req.params.id);
         if (!sheet) {
             return res.status(404).json({ message: "Test schedule not found" });
         }
@@ -89,7 +95,7 @@ router.put("/updateScheduleEntry/:sheetId/:entryId", authMiddleWare, async (req,
     }
     const { courseId, testDate, testDay, syllabus } = req.body;
     try {
-        const sheet = await TestScheduleAndSyllabus.findById(req.params.sheetId);
+        const sheet = await TestShaduleandSyllabus.findById(req.params.sheetId);
         if (!sheet) {
             return res.status(404).json({ message: "Test schedule not found" });
         }
@@ -123,7 +129,7 @@ router.post("/addScheduleEntry/:sheetId", authMiddleWare, async (req, res) => {
         return res.status(400).json({ message: "Course, date, day, and syllabus are required" });
     }
     try {
-        const sheet = await TestScheduleAndSyllabus.findById(req.params.sheetId);
+        const sheet = await TestShaduleandSyllabus.findById(req.params.sheetId);
         if (!sheet) {
             return res.status(404).json({ message: "Test schedule not found" });
         }
@@ -144,7 +150,7 @@ router.delete("/deleteScheduleEntry/:sheetId/:entryId", authMiddleWare, async (r
         return res.status(403).json({ message: "Access denied" });
     }
     try {
-        const sheet = await TestScheduleAndSyllabus.findById(req.params.sheetId);
+        const sheet = await TestShaduleandSyllabus.findById(req.params.sheetId);
         if (!sheet) {
             return res.status(404).json({ message: "Test schedule not found" });
         }
@@ -169,12 +175,12 @@ router.get("/getTestScheduleAndSyllabusByclassInfo/:classInfo", authMiddleWare, 
         return res.status(400).json({ message: "Class info is required" });
     }
     try {
-        const sheets = await TestScheduleAndSyllabus.find({ classInfo })
-            .populate("schedules.course", "name")
+        const sheets = await TestShaduleandSyllabus.find({ classInfo })
+            .populate("schedules.course", "title")
             .sort({ createdAt: -1 });
         res.json({ sheets });
     } catch (error) {
-        res.status(500).json({ message: "Server error" });
+        res.status(500).json({ message: error.message });
     }
 });
 
@@ -192,7 +198,7 @@ router.get("/getTestScheduleAndSyllabusByCourse/:courseId", authMiddleWare, asyn
         return res.status(400).json({ message: "Course ID is required" });
     }
     try {
-        const sheets = await TestScheduleAndSyllabus.aggregate([
+        const sheets = await TestShaduleandSyllabus.aggregate([
             { $match: { "schedules.course": new (require("mongoose").Types.ObjectId)(courseId) } },
             { $unwind: "$schedules" },
             { $match: { "schedules.course": new (require("mongoose").Types.ObjectId)(courseId) } },
@@ -226,11 +232,29 @@ router.get("/getAllTestSchedules", authMiddleWare, async (req, res) => {
         return res.status(403).json({ message: "Access denied" });
     }
     try {
-        const sheets = await TestScheduleAndSyllabus.find({})
+        const sheets = await TestShaduleandSyllabus.find({})
             .populate("classInfo", "name")
-            .populate("schedules.course", "name")
+            .populate("schedules.course", "title")
             .sort({ createdAt: -1 });
         res.json({ sheets });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// routes/testScheduleAndSyllabus.js — ADD this route
+
+// Delete an entire sheet (title + all its schedule entries).
+router.delete("/deleteTestSchedule/:id", authMiddleWare, async (req, res) => {
+    if (req.user.role !== "admin") {
+        return res.status(403).json({ message: "Access denied" });
+    }
+    try {
+        const sheet = await TestShaduleandSyllabus.findByIdAndDelete(req.params.id);
+        if (!sheet) {
+            return res.status(404).json({ message: "Test schedule not found" });
+        }
+        res.json({ message: "Test schedule deleted successfully" });
     } catch (error) {
         res.status(500).json({ message: "Server error" });
     }

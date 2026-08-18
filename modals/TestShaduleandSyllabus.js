@@ -54,3 +54,10 @@ const testScheduleAndSyllabusSchema = new mongoose.Schema(
     },
     { timestamps: true }
 );
+
+const TestShaduleandSyllabus = mongoose.model(
+    "TestShaduleandSyllabus",
+    testScheduleAndSyllabusSchema
+);
+
+module.exports = TestShaduleandSyllabus;
