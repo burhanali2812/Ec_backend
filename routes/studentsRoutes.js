@@ -145,6 +145,7 @@ router.post("/login", async (req, res) => {
         name: student.name,
         email: student.email,
         role: "student",
+        classInfo: student.classInfo,
       },
     });
   } catch (error) {
