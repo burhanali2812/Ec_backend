@@ -130,6 +130,7 @@ router.post("/login", async (req, res) => {
       {
         id: student._id,
         role: "student",
+        classInfo: student.classInfo,
         institutionType: student.institutionType,
       },
       process.env.JWT_SECRET,
