@@ -1,25 +1,17 @@
 const mongoose = require("mongoose");
 
-const testScheduleAndSyllabusSchema = new mongoose.Schema(
+const schedules = new mongoose.Schema(
     {
         course: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "Course",
             required: true,
         },
-        classInfo: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "Class",
-            required: true,
-        },
-        syllabus: {
-            type: String,
-        },
-        title: {
+         syllabus: {
             type: String,
             required: true,
         },
-        testDay: {
+         testDay: {
             type: String,
             enum: [
                 "Monday",
@@ -35,10 +27,30 @@ const testScheduleAndSyllabusSchema = new mongoose.Schema(
             type: Date,
             required: true,
         },
-        syllabusUpdatedAt: {
+        
+
+    }
+)
+
+const testScheduleAndSyllabusSchema = new mongoose.Schema(
+    {
+        classInfo: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Class",
+            required: true,
+        },
+       
+        title: {
+            type: String,
+            required: true,
+        },
+        schedules: [schedules],
+          syllabusUpdatedAt: {
             type: Date,
             default: Date.now,
         },
+       
+      
     },
     { timestamps: true }
 );

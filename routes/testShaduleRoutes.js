@@ -4,55 +4,162 @@ const Course = require("../modals/Course");
 const TestScheduleAndSyllabus = require("../modals/TestShaduleandSyllabus");
 const authMiddleWare = require("../authMiddleWare");
 
+// ---------------------------------------------------------------------
+// CREATE a sheet: title + class + the full batch of test-day entries.
+// This replaces both the old single-add and bulk-add routes — one sheet
+// document per submission of the wizard.
+// body: { classInfo, title, schedules: [{ courseId, testDate, testDay, syllabus }] }
+// ---------------------------------------------------------------------
 router.post("/addTestScheduleByAdmin", authMiddleWare, async (req, res) => {
     if (req.user.role !== "admin") {
         return res.status(403).json({ message: "Access denied" });
     }
-    const { courseId, testDay , classInfo, testDate , title } = req.body;
-    if (!courseId || !testDay || !classInfo || !testDate || !title) {
-        return res.status(400).json({ message: "Course ID, test day, class info, test date, and title are required" });
+    const { classInfo, title, schedules } = req.body;
+
+    if (!classInfo || !title || !Array.isArray(schedules) || schedules.length === 0) {
+        return res.status(400).json({ message: "Class, title, and at least one schedule entry are required" });
     }
-    try {        const course = await Course.findById(courseId);
-        if (!course) {
-            return res.status(404).json({ message: "Course not found" });
+
+    const invalid = schedules.find(
+        (s) => !s.courseId || !s.testDate || !s.testDay || !s.syllabus
+    );
+    if (invalid) {
+        return res.status(400).json({ message: "Each entry needs course, date, day, and syllabus" });
+    }
+
+    try {
+        // Sanity check the courses exist before writing
+        const courseIds = schedules.map((s) => s.courseId);
+        const foundCount = await Course.countDocuments({ _id: { $in: courseIds } });
+        if (foundCount !== new Set(courseIds).size) {
+            return res.status(404).json({ message: "One or more courses not found" });
         }
-        const existingSchedule = await TestScheduleAndSyllabus.findOne({ course: courseId });
-        if (existingSchedule) {
-            return res.status(400).json({ message: "Test schedule already exists for this course" });
-        }
-        const newSchedule = new TestScheduleAndSyllabus({ course: courseId, testDay, classInfo, testDate, title });
-        await newSchedule.save();
-        res.status(201).json({ message: "Test schedule added successfully" });
+
+        const newSheet = new TestScheduleAndSyllabus({
+            classInfo,
+            title,
+            schedules: schedules.map((s) => ({
+                course: s.courseId,
+                testDate: s.testDate,
+                testDay: s.testDay,
+                syllabus: s.syllabus,
+            })),
+        });
+        await newSheet.save();
+        res.status(201).json({ message: "Test schedule added successfully", sheet: newSheet });
     } catch (error) {
         res.status(500).json({ message: "Server error" });
     }
 });
 
-router.put("/UpdatedTestSchedule/:id", authMiddleWare, async (req, res) => {
+// ---------------------------------------------------------------------
+// UPDATE the sheet's own fields (title / class). To edit an individual
+// test day, use updateScheduleEntry below instead.
+// ---------------------------------------------------------------------
+router.put("/updateTestSchedule/:id", authMiddleWare, async (req, res) => {
     if (req.user.role !== "admin") {
         return res.status(403).json({ message: "Access denied" });
     }
-    const { syllabus, title, testDay, testDate, classInfo } = req.body;
-    if (!syllabus && !title && !testDay && !testDate && !classInfo) {
-        return res.status(400).json({ message: "Syllabus, title, test day, test date, and class info are required" });
+    const { title, classInfo } = req.body;
+    if (!title && !classInfo) {
+        return res.status(400).json({ message: "Provide title and/or classInfo to update" });
     }
     try {
-        const schedule = await TestScheduleAndSyllabus.findById(req.params.id);
-        if (!schedule) {
+        const sheet = await TestScheduleAndSyllabus.findById(req.params.id);
+        if (!sheet) {
             return res.status(404).json({ message: "Test schedule not found" });
         }
-        schedule.syllabus = syllabus;
-        schedule.title = title;
-        schedule.testDay = testDay;
-        schedule.testDate = testDate;
-        schedule.classInfo = classInfo;
-        schedule.syllabusUpdatedAt = Date.now();
-        await schedule.save();
-        res.json({ message: "Syllabus updated successfully" });
+        if (title) sheet.title = title;
+        if (classInfo) sheet.classInfo = classInfo;
+        sheet.syllabusUpdatedAt = Date.now();
+        await sheet.save();
+        res.json({ message: "Test schedule updated successfully", sheet });
     } catch (error) {
         res.status(500).json({ message: "Server error" });
     }
 });
+
+// ---------------------------------------------------------------------
+// UPDATE a single test-day entry inside a sheet.
+// body: { courseId, testDate, testDay, syllabus } — send only what changes
+// ---------------------------------------------------------------------
+router.put("/updateScheduleEntry/:sheetId/:entryId", authMiddleWare, async (req, res) => {
+    if (req.user.role !== "admin") {
+        return res.status(403).json({ message: "Access denied" });
+    }
+    const { courseId, testDate, testDay, syllabus } = req.body;
+    try {
+        const sheet = await TestScheduleAndSyllabus.findById(req.params.sheetId);
+        if (!sheet) {
+            return res.status(404).json({ message: "Test schedule not found" });
+        }
+        const entry = sheet.schedules.id(req.params.entryId);
+        if (!entry) {
+            return res.status(404).json({ message: "Schedule entry not found" });
+        }
+        if (courseId) entry.course = courseId;
+        if (testDate) entry.testDate = testDate;
+        if (testDay) entry.testDay = testDay;
+        if (syllabus) entry.syllabus = syllabus;
+        sheet.syllabusUpdatedAt = Date.now();
+        await sheet.save();
+        res.json({ message: "Schedule entry updated successfully", sheet });
+    } catch (error) {
+        res.status(500).json({ message: "Server error" });
+    }
+});
+
+// ---------------------------------------------------------------------
+// ADD a single test-day entry to an existing sheet (e.g. one extra date
+// added later, outside the original range).
+// body: { courseId, testDate, testDay, syllabus }
+// ---------------------------------------------------------------------
+router.post("/addScheduleEntry/:sheetId", authMiddleWare, async (req, res) => {
+    if (req.user.role !== "admin") {
+        return res.status(403).json({ message: "Access denied" });
+    }
+    const { courseId, testDate, testDay, syllabus } = req.body;
+    if (!courseId || !testDate || !testDay || !syllabus) {
+        return res.status(400).json({ message: "Course, date, day, and syllabus are required" });
+    }
+    try {
+        const sheet = await TestScheduleAndSyllabus.findById(req.params.sheetId);
+        if (!sheet) {
+            return res.status(404).json({ message: "Test schedule not found" });
+        }
+        sheet.schedules.push({ course: courseId, testDate, testDay, syllabus });
+        sheet.syllabusUpdatedAt = Date.now();
+        await sheet.save();
+        res.status(201).json({ message: "Entry added successfully", sheet });
+    } catch (error) {
+        res.status(500).json({ message: "Server error" });
+    }
+});
+
+// ---------------------------------------------------------------------
+// DELETE a single test-day entry from a sheet.
+// ---------------------------------------------------------------------
+router.delete("/deleteScheduleEntry/:sheetId/:entryId", authMiddleWare, async (req, res) => {
+    if (req.user.role !== "admin") {
+        return res.status(403).json({ message: "Access denied" });
+    }
+    try {
+        const sheet = await TestScheduleAndSyllabus.findById(req.params.sheetId);
+        if (!sheet) {
+            return res.status(404).json({ message: "Test schedule not found" });
+        }
+        sheet.schedules.id(req.params.entryId)?.deleteOne();
+        sheet.syllabusUpdatedAt = Date.now();
+        await sheet.save();
+        res.json({ message: "Entry deleted successfully", sheet });
+    } catch (error) {
+        res.status(500).json({ message: "Server error" });
+    }
+});
+
+// ---------------------------------------------------------------------
+// GET all sheets for a class (student view).
+// ---------------------------------------------------------------------
 router.get("/getTestScheduleAndSyllabusByclassInfo/:classInfo", authMiddleWare, async (req, res) => {
     if (req.user.role !== "student") {
         return res.status(403).json({ message: "Access denied" });
@@ -62,14 +169,20 @@ router.get("/getTestScheduleAndSyllabusByclassInfo/:classInfo", authMiddleWare, 
         return res.status(400).json({ message: "Class info is required" });
     }
     try {
-        const schedules = await TestScheduleAndSyllabus.find({ classInfo })
-    .populate("course")
-    .sort({ testDate: 1 });
-        res.json({ schedules });
+        const sheets = await TestScheduleAndSyllabus.find({ classInfo })
+            .populate("schedules.course", "name")
+            .sort({ createdAt: -1 });
+        res.json({ sheets });
     } catch (error) {
         res.status(500).json({ message: "Server error" });
     }
 });
+
+// ---------------------------------------------------------------------
+// GET every entry for a given course, across all sheets (teacher view).
+// course now lives inside the schedules array, so this uses aggregation
+// to pull out just the matching entries.
+// ---------------------------------------------------------------------
 router.get("/getTestScheduleAndSyllabusByCourse/:courseId", authMiddleWare, async (req, res) => {
     if (req.user.role !== "teacher") {
         return res.status(403).json({ message: "Access denied" });
@@ -78,69 +191,49 @@ router.get("/getTestScheduleAndSyllabusByCourse/:courseId", authMiddleWare, asyn
     if (!courseId) {
         return res.status(400).json({ message: "Course ID is required" });
     }
-    try {        const schedule = await TestScheduleAndSyllabus.findOne({ course: courseId }).populate("course");
-        if (!schedule) {
-            return res.status(404).json({ message: "Test schedule not found for this course" });
+    try {
+        const sheets = await TestScheduleAndSyllabus.aggregate([
+            { $match: { "schedules.course": new (require("mongoose").Types.ObjectId)(courseId) } },
+            { $unwind: "$schedules" },
+            { $match: { "schedules.course": new (require("mongoose").Types.ObjectId)(courseId) } },
+            {
+                $project: {
+                    title: 1,
+                    classInfo: 1,
+                    testDate: "$schedules.testDate",
+                    testDay: "$schedules.testDay",
+                    syllabus: "$schedules.syllabus",
+                    entryId: "$schedules._id",
+                },
+            },
+            { $sort: { testDate: 1 } },
+        ]);
+
+        if (!sheets.length) {
+            return res.status(404).json({ message: "No test schedule found for this course" });
         }
-        res.json({ schedule });
-    }
-        catch (error) {
+        res.json({ schedules: sheets });
+    } catch (error) {
         res.status(500).json({ message: "Server error" });
     }
 });
 
-
-
-// Bulk add: admin picks a class + date range in the UI, then submits one
-// row per non-Sunday date. Each row = { courseId, testDate, testDay, title, syllabus }
-router.post("/addBulkTestSchedule", authMiddleWare, async (req, res) => {
-    if (req.user.role !== "admin") {
-        return res.status(403).json({ message: "Access denied" });
-    }
-    const { classInfo, schedules } = req.body;
-    // schedules: [{ courseId, testDate, testDay, title, syllabus }]
-    if (!classInfo || !Array.isArray(schedules) || schedules.length === 0) {
-        return res.status(400).json({ message: "Class and at least one schedule entry are required" });
-    }
-
-    const invalid = schedules.find(
-        (s) => !s.courseId || !s.testDate || !s.testDay || !s.title
-    );
-    if (invalid) {
-        return res.status(400).json({ message: "Each entry needs course, date, day, and title" });
-    }
-
-    try {
-        const docs = schedules.map((s) => ({
-            course: s.courseId,
-            classInfo,
-            testDay: s.testDay,
-            testDate: s.testDate,
-            title: s.title,
-            syllabus: s.syllabus || "",
-        }));
-        const created = await TestScheduleAndSyllabus.insertMany(docs);
-        res.status(201).json({ message: "Test schedule added successfully", created });
-    } catch (error) {
-        res.status(500).json({ message: "Server error", error });
-    }
-});
-
-
-// Returns every scheduled test, newest date first. Used by the admin
-// review table (with client-side class filter).
+// ---------------------------------------------------------------------
+// GET everything (admin review table, with class filter on the frontend).
+// ---------------------------------------------------------------------
 router.get("/getAllTestSchedules", authMiddleWare, async (req, res) => {
     if (req.user.role !== "admin") {
         return res.status(403).json({ message: "Access denied" });
     }
     try {
-        const schedules = await TestScheduleAndSyllabus.find({})
-            .populate("course", "name")
+        const sheets = await TestScheduleAndSyllabus.find({})
             .populate("classInfo", "name")
-            .sort({ testDate: 1 });
-        res.json({ schedules });
+            .populate("schedules.course", "name")
+            .sort({ createdAt: -1 });
+        res.json({ sheets });
     } catch (error) {
         res.status(500).json({ message: "Server error" });
     }
 });
+
 module.exports = router;
