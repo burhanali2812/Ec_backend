@@ -1,8 +1,10 @@
+require("dotenv").config();
 const mongoose = require("mongoose");
 const express = require("express");
 const cors = require("cors");
 const moment = require("moment-timezone");
-require("dotenv").config();
+const { messaging } = require("./services/firebase");
+
 
 const app = express();
 

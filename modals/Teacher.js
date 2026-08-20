@@ -23,6 +23,10 @@ securityAnswer: {
   type: String,
   default: ""
 },
+fcmTokens: {
+  type: [String],
+  default: [],
+},
 isSecuritySet: {
   type: Boolean,
   default: false

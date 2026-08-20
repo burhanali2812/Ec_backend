@@ -11,6 +11,10 @@ const studentSchema = new mongoose.Schema({
   rollNumber: { type: String, required: true, unique: true },
   classInfo: { type: mongoose.Schema.Types.ObjectId, ref: "Class", required: true },
   fatherName: { type: String, required: true },
+  fcmTokens: {
+  type: [String],
+  default: [],
+},
   fatherContact: { type: String },
   password: { type: String, required: true },
   isPasswordChanged: {

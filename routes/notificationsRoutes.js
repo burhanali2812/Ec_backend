@@ -457,4 +457,44 @@ router.delete("/:id", authMiddleWare, async (req, res) => {
   }
 });
 
+router.post("/fcm-token", async (req, res) => {
+  try {
+    const { token, userId } = req.body;
+
+    if (!token || !userId) {
+      return res.status(400).json({
+        success: false,
+        message: "Token and user ID are required",
+      });
+    }
+
+    // Find your user here
+    // Example:
+    const user = await Registration.findById(userId); // Adjust this line based on your user model
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    user.fcmToken = token;
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: "FCM token saved successfully",
+    });
+  } catch (error) {
+    console.error("FCM token error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
 module.exports = router;

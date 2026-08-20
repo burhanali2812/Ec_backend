@@ -142,6 +142,7 @@ router.post("/login", async (req, res) => {
       message: "Login successful",
       studentId: student._id,
       user: {
+        id: student._id,
         name: student.name,
         email: student.email,
         role: "student",
