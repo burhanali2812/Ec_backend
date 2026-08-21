@@ -3,7 +3,7 @@ const { getMessaging } = require("firebase-admin/messaging");
 
 if (!getApps().length) {
   const serviceAccount = JSON.parse(
-    process.env.FIREBASE_SERVICE_ACCOUNT
+    process.env.FIREBASE_SERVICE_ACCOUNT_BASE64
   );
 
   initializeApp({
