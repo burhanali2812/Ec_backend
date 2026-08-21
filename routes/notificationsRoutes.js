@@ -4,6 +4,7 @@ const router = express.Router();
 const Notification = require("../modals/Notification");
 const Student = require("../modals/Student");
 const Teacher = require("../modals/Teacher");
+const Admin = require("../modals/Admin");
 const authMiddleWare = require("../authMiddleWare");
 
 // NOTE: Plug your existing admin-only auth middleware in front of the
@@ -470,13 +471,30 @@ router.post("/fcm-token", async (req, res) => {
 
     // Find your user here
     // Example:
-    const user = await Registration.findById(userId); // Adjust this line based on your user model
-
+    const user = await Student.findById(userId); // Adjust this line based on your user model
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+      // If not found in Student, check Teacher
+      const teacher = await Teacher.findById(userId);
+      if (teacher) {
+        teacher.fcmTokens.push(token);
+        await teacher.save();
+        return res.json({
+          success: true,
+          message: "FCM token saved successfully for teacher",
+        });
+      }
+    }
+    if (!user) {
+      // If not found in Student or Teacher, check Admin
+      const admin = await Admin.findById(userId);
+      if (admin) {
+        admin.fcmTokens.push(token);
+        await admin.save();
+        return res.json({
+          success: true,
+          message: "FCM token saved successfully for admin",
+        });
+      }
     }
 
     user.fcmToken = token;
@@ -485,7 +503,7 @@ router.post("/fcm-token", async (req, res) => {
 
     res.json({
       success: true,
-      message: "FCM token saved successfully",
+      message: "FCM token saved successfully for student",
     });
   } catch (error) {
     console.error("FCM token error:", error);
