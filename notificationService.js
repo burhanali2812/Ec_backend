@@ -71,6 +71,10 @@ async function createNotification({
       console.log(
         `✅ FCM: ${response.successCount} sent, ${response.failureCount} failed`
       );
+      console.log(
+        "🔔 FCM Response:",
+        JSON.stringify(response, null, 2)
+      );
 
       // Optional: handle failed/expired tokens here
     } catch (error) {
