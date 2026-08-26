@@ -118,8 +118,12 @@ router.post("/", authMiddleWare, async (req, res) => {
       publishedBy: "admin",
       recipients,
     });
+    let newHolidayTitle = "";
+    if (type === "Holiday") {
+      newHolidayTitle = `${title} - Holiday from ${date.from} to ${date.to}`;
+    }
 
-    await notifyByAdmin(recipients, { title, message, type });
+    await notifyByAdmin(recipients, { title: newHolidayTitle || title, message, type });
 
     return res.status(201).json({
       success: true,
