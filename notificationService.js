@@ -52,38 +52,35 @@ async function createNotification({
   const uniqueTokens = [...new Set(fcmTokens)];
 
   // Send Firebase notification
-  if (uniqueTokens.length > 0) {
-    const messagePayload = {
-      tokens: uniqueTokens,
+ if (uniqueTokens.length > 0) {
+  const results = await Promise.allSettled(
+    uniqueTokens.map((token) =>
+      messaging.send({
+        token,
 
-      data: {
-        type: String(type),
-        title: String(title),
-        body: String(message),
-      },
-    };
+        data: {
+          type: String(type),
+          title: String(title),
+          body: String(message),
+        },
+      })
+    )
+  );
 
-    try {
-      const response = await messaging.sendEachForMulticast(
-        messagePayload
-      );
-
+  results.forEach((result, index) => {
+    if (result.status === "fulfilled") {
       console.log(
-        `✅ FCM: ${response.successCount} sent, ${response.failureCount} failed`
+        `✅ FCM sent to token ${index + 1}:`,
+        result.value
       );
-      console.log(
-        "🔔 FCM Response:",
-        JSON.stringify(response, null, 2)
-      );
-
-      // Optional: handle failed/expired tokens here
-    } catch (error) {
+    } else {
       console.error(
-        "❌ Error sending FCM notification:",
-        error
+        `❌ FCM failed for token ${index + 1}:`,
+        result.reason
       );
     }
-  }
+  });
+}
 
   // Always save notification in MongoDB
   return Notification.create({
