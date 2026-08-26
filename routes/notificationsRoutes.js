@@ -120,7 +120,7 @@ router.post("/", authMiddleWare, async (req, res) => {
     });
     let newHolidayTitle = "";
     if (type === "Holiday") {
-      newHolidayTitle = `${title} - Holiday from ${date.from} to ${date.to}`;
+      newHolidayTitle = `${title} - Holiday from ${dateRange.from} to ${dateRange.to}`;
     }
 
     await notifyByAdmin(recipients, { title: newHolidayTitle || title, message, type });
