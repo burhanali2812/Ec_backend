@@ -70,7 +70,7 @@ async function createNotification({
   results.forEach((result, index) => {
     if (result.status === "fulfilled") {
       console.log(
-        `✅ FCM sent to token ${index + 1}:`,
+        `FCM sent to token ${index + 1}:`,
         result.value
       );
     } else {
@@ -119,7 +119,7 @@ async function notifyResultUploaded(studentIds, { courseName, dateOfExam }) {
  * studentIds: array of Student _ids who just had a fee voucher created.
  */
 async function notifyFeeGenerated(studentIds, { month }) {
-  const recipients = studentIds.map((id) => ({ id, role: "Student" }));
+  const recipients = studentIds.map((id) => ({ id, role: "student" }));
 
   return createNotification({
     title: "Fee Voucher Generated",
@@ -204,8 +204,84 @@ async function notifyLeaveResponse(
   });
 }
 
+//notifybyadmin just firebase notification to student or teacher when admin send notification to them
+async function notifyByAdmin(recipients, { title, message, type }) {
+
+   if (!recipients || recipients.length === 0) {
+    console.warn(`Notification "${title}" skipped — no recipients given.`);
+    return null;
+  }
+
+  const fcmTokens = [];
+
+  for (const recipient of recipients) {
+    const { id, role } = recipient;
+
+    let user;
+
+    switch (role) {
+      case "student":
+        user = await Student.findById(id).select("fcmTokens");
+        break;
+
+      case "teacher":
+        user = await Teacher.findById(id).select("fcmTokens");
+        break;
+
+      case "admin":
+        user = await Admin.findById(id).select("fcmTokens");
+        break;
+
+      default:
+        console.warn(
+          `Unknown role "${role}" for recipient with ID "${id}"`
+        );
+        continue;
+    }
+
+    if (user?.fcmTokens?.length) {
+      fcmTokens.push(...user.fcmTokens);
+    }
+  }
+
+  // Remove duplicate tokens
+  const uniqueTokens = [...new Set(fcmTokens)];
+
+  // Send Firebase notification
+ if (uniqueTokens.length > 0) {
+  const results = await Promise.allSettled(
+    uniqueTokens.map((token) =>
+      messaging.send({
+        token,
+
+        data: {
+          type: String(type),
+          title: String(title),
+          body: String(message),
+        },
+      })
+    )
+  );
+
+  results.forEach((result, index) => {
+    if (result.status === "fulfilled") {
+      console.log(
+        `FCM sent to token ${index + 1}:`,
+        result.value
+      );
+    } else {
+      console.error(
+        `❌ FCM failed for token ${index + 1}:`,
+        result.reason
+      );
+    }
+  });
+}
+}
+
 module.exports = {
   createNotification,
+  notifyByAdmin,
   notifyResultUploaded,
   notifyFeeGenerated,
   notifyLeaveRequested,

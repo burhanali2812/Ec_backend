@@ -6,6 +6,7 @@ const Student = require("../modals/Student");
 const Teacher = require("../modals/Teacher");
 const Admin = require("../modals/Admin");
 const authMiddleWare = require("../authMiddleWare");
+const {notifyByAdmin} = require("../notificationService");
 
 
 const { messaging } = require("../services/firebase");
@@ -117,6 +118,8 @@ router.post("/", authMiddleWare, async (req, res) => {
       publishedBy: "admin",
       recipients,
     });
+
+    await notifyByAdmin(recipients, { title, message, type });
 
     return res.status(201).json({
       success: true,
