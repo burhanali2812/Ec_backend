@@ -1,18 +1,99 @@
 const Notification = require("./modals/Notification");
+const Student = require("./modals/Student");
+const Teacher = require("./modals/Teacher");
+const Admin = require("./modals/Admin");
+const messaging = require("./services/firebase").messaging;
 
-async function createNotification({ title, message, type, target, recipients }) {
+async function createNotification({
+  title,
+  message,
+  type,
+  target,
+  recipients,
+}) {
   if (!recipients || recipients.length === 0) {
     console.warn(`Notification "${title}" skipped — no recipients given.`);
     return null;
   }
 
+  const fcmTokens = [];
+
+  for (const recipient of recipients) {
+    const { id, role } = recipient;
+
+    let user;
+
+    switch (role) {
+      case "student":
+        user = await Student.findById(id).select("fcmTokens");
+        break;
+
+      case "teacher":
+        user = await Teacher.findById(id).select("fcmTokens");
+        break;
+
+      case "admin":
+        user = await Admin.findById(id).select("fcmTokens");
+        break;
+
+      default:
+        console.warn(
+          `Unknown role "${role}" for recipient with ID "${id}"`
+        );
+        continue;
+    }
+
+    if (user?.fcmTokens?.length) {
+      fcmTokens.push(...user.fcmTokens);
+    }
+  }
+
+  // Remove duplicate tokens
+  const uniqueTokens = [...new Set(fcmTokens)];
+
+  // Send Firebase notification
+  if (uniqueTokens.length > 0) {
+    const messagePayload = {
+      tokens: uniqueTokens,
+
+      data: {
+        type: String(type),
+        title: String(title),
+        body: String(message),
+      },
+    };
+
+    try {
+      const response = await messaging.sendEachForMulticast(
+        messagePayload
+      );
+
+      console.log(
+        `✅ FCM: ${response.successCount} sent, ${response.failureCount} failed`
+      );
+
+      // Optional: handle failed/expired tokens here
+    } catch (error) {
+      console.error(
+        "❌ Error sending FCM notification:",
+        error
+      );
+    }
+  }
+
+  // Always save notification in MongoDB
   return Notification.create({
     title,
     message,
     type,
     target,
-    publishedBy : "system",
-    recipients: recipients.map((r) => ({ id: r.id, role: r.role, isRead: false })),
+    publishedBy: "system",
+
+    recipients: recipients.map((r) => ({
+      id: r.id,
+      role: r.role,
+      isRead: false,
+    })),
   });
 }
 
