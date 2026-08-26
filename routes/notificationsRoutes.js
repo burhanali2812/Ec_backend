@@ -472,45 +472,72 @@ router.post("/fcm-token", async (req, res) => {
       });
     }
 
- 
-    const user = await Student.findById(userId); 
-    if (!user) {
-      // If not found in Student, check Teacher
-      const teacher = await Teacher.findById(userId);
-      if (teacher) {
-        teacher.fcmTokens.push(token);
-        await teacher.save();
-        return res.json({
-          success: true,
-          message: "FCM token saved successfully for teacher",
-        });
+    // Check Student
+    let user = await Student.findById(userId);
+
+    if (user) {
+      if (!user.fcmTokens) {
+        user.fcmTokens = [];
       }
-    }
-    if (!user) {
-      // If not found in Student or Teacher, check Admin
-      const admin = await Admin.findById(userId);
-      if (admin) {
-        admin.fcmTokens.push(token);
-        await admin.save();
-        return res.json({
-          success: true,
-          message: "FCM token saved successfully for admin",
-        });
+
+      if (!user.fcmTokens.includes(token)) {
+        user.fcmTokens.push(token);
+        await user.save();
       }
+
+      return res.json({
+        success: true,
+        message: "FCM token saved successfully for student",
+      });
     }
 
-    user.fcmToken = token;
+    // Check Teacher
+    user = await Teacher.findById(userId);
 
-    await user.save();
+    if (user) {
+      if (!user.fcmTokens) {
+        user.fcmTokens = [];
+      }
 
-    res.json({
-      success: true,
-      message: "FCM token saved successfully for student",
+      if (!user.fcmTokens.includes(token)) {
+        user.fcmTokens.push(token);
+        await user.save();
+      }
+
+      return res.json({
+        success: true,
+        message: "FCM token saved successfully for teacher",
+      });
+    }
+
+    // Check Admin
+    user = await Admin.findById(userId);
+
+    if (user) {
+      if (!user.fcmTokens) {
+        user.fcmTokens = [];
+      }
+
+      if (!user.fcmTokens.includes(token)) {
+        user.fcmTokens.push(token);
+        await user.save();
+      }
+
+      return res.json({
+        success: true,
+        message: "FCM token saved successfully for admin",
+      });
+    }
+
+    return res.status(404).json({
+      success: false,
+      message: "User not found",
     });
+
   } catch (error) {
     console.error("FCM token error:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
