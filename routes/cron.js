@@ -2,7 +2,7 @@
 const express = require("express");
 const router = express.Router();
 const Course = require("../modals/Course");
-const Attendance = require("../modals/Attendance");
+const Attendance = require("../modals/Attandance");
 const AttendanceReminderLog = require("../modals/AttendanceReminderLog");
 const { createNotification } = require("../notificationService");
 
