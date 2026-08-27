@@ -16,10 +16,7 @@ function getTodayRangeKarachi() {
 }
 
 router.get("/attendance-daily-check", async (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return res.status(401).json({ success: false, message: "Unauthorized" });
-  }
+  
 
   try {
     const { startOfDay, endOfDay, dateStr } = getTodayRangeKarachi();
