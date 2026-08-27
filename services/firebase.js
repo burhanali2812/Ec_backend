@@ -20,7 +20,7 @@ if (!getApps().length) {
     credential: cert(serviceAccount),
   });
 
-  console.log("🔥 Firebase Admin initialized successfully");
+  console.log("Firebase Admin initialized successfully");
 }
 
 const messaging = getMessaging();

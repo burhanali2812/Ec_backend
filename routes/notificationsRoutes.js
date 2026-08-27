@@ -119,8 +119,14 @@ router.post("/", authMiddleWare, async (req, res) => {
       recipients,
     });
     let newHolidayTitle = "";
+    //date pattren must be like 26 Aug 2024 - 30 Aug 2024
+    const fromDate = new Date(dateRange.from);
+    const toDate = new Date(dateRange.to);
+    const options = { day: "numeric", month: "short", year: "numeric" };
+    const fromDateString = fromDate.toLocaleDateString("en-US", options);
+    const toDateString = toDate.toLocaleDateString("en-US", options);
     if (type === "Holiday") {
-      newHolidayTitle = `${title} - Holiday from ${dateRange.from} to ${dateRange.to}`;
+      newHolidayTitle = `${title} - Holiday from ${fromDateString} to ${toDateString}`;
     }
 
     await notifyByAdmin(recipients, { title: newHolidayTitle || title, message, type });
