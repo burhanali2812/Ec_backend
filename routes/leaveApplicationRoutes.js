@@ -43,7 +43,7 @@ router.post("/applyLeave", authMiddleWare, async (req, res) => {
       fromDate,
       toDate,
     });
-    const adminId = Admin.findOne().select("_id").lean(); // Assuming there's at least one admin
+    const adminId = Admin.findOne().select("_id"); // Assuming there's at least one admin
     if (!adminId) {
       return res.status(500).json({ message: "No admin found to notify" });
     }
