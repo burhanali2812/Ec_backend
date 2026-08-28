@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/cron/attendance-daily-check",
-      "schedule": "0 20 * * *"
+      "schedule": "0 16 * * *"
     }
   ]
 }

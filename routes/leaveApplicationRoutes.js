@@ -43,13 +43,14 @@ router.post("/applyLeave", authMiddleWare, async (req, res) => {
       toDate,
     });
     await newLeaveApplication.save();
-    await notifyLeaveRequested(applicantId, isTeacher ? "teacher" : "student", {
-      name,
-      email,
-      reason,
-      fromDate,
-      toDate,
-    });
+  await notifyLeaveRequested(adminIds, {
+  applicantName: name,
+  applicantRole: isTeacher ? "teacher" : "student",
+  email,
+  reason,
+  fromDate,
+  toDate,
+});
     await notifyLeaveResponse(applicantId, isTeacher ? "teacher" : "student", {
       status: "pending",
       adminNote: "Your leave request has been submitted and is awaiting review.",
