@@ -138,25 +138,27 @@ async function notifyFeeGenerated(studentIds, { month }) {
  * adminIds: array of Admin _ids who should be notified.
  * applicantName/applicantRole: who requested the leave, for the message.
  */
-async function notifyLeaveRequested(adminIds, {
-  applicantName,
-  applicantRole,
-  email,
-  reason,
-  fromDate,
-  toDate,
-}) {
-  const recipients = adminIds.map((id) => ({
-    id,
-    role: "admin",
-  }));
-
+async function notifyLeaveRequested(
+  adminId,
+  {
+    applicantName,
+    applicantRole,
+    reason,
+    fromDate,
+    toDate,
+  }
+) {
   return createNotification({
     title: "New Leave Request",
     message: `${applicantName} (${applicantRole}) has submitted a leave request from ${fromDate} to ${toDate}. Reason: ${reason}. Please review and respond.`,
     type: "Leave",
     target: "admins",
-    recipients,
+    recipients: [
+      {
+        id: adminId,
+        role: "admin",
+      },
+    ],
   });
 }
 async function notifyAttendanceUploaded(studentIds, { courseName, date }  )    {

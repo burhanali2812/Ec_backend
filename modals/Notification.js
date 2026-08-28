@@ -56,7 +56,7 @@ const notificationSchema = new mongoose.Schema(
     // Who this was sent to, kept for display in the admin table.
     target: {
       type: String,
-      enum: ["students", "teachers", "both"],
+      enum: ["students", "teachers", "both", "admins"],
       required: true,
     },
 

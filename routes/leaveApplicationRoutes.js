@@ -4,6 +4,7 @@ const Course = require("../modals/Course");
 const authMiddleWare = require("../authMiddleWare");
 const Student = require("../modals/Student");
 const LeaveApplication = require("../modals/LeaveApplication");
+const Admin = require("../modals/Admin");
 const {notifyLeaveResponse, notifyLeaveRequested} = require("../notificationService");
 const router = express.Router();
 
@@ -42,11 +43,14 @@ router.post("/applyLeave", authMiddleWare, async (req, res) => {
       fromDate,
       toDate,
     });
+    const adminId = Admin.findOne().select("_id").lean(); // Assuming there's at least one admin
+    if (!adminId) {
+      return res.status(500).json({ message: "No admin found to notify" });
+    }
     await newLeaveApplication.save();
-  await notifyLeaveRequested(applicantId, {
+await notifyLeaveRequested(adminId, {
   applicantName: name,
   applicantRole: isTeacher ? "teacher" : "student",
-  email,
   reason,
   fromDate,
   toDate,
