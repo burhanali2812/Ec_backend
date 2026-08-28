@@ -43,7 +43,7 @@ router.post("/applyLeave", authMiddleWare, async (req, res) => {
       toDate,
     });
     await newLeaveApplication.save();
-  await notifyLeaveRequested(adminIds, {
+  await notifyLeaveRequested(applicantId, {
   applicantName: name,
   applicantRole: isTeacher ? "teacher" : "student",
   email,
