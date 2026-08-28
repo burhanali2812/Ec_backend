@@ -4,7 +4,7 @@ const Course = require("../modals/Course");
 const authMiddleWare = require("../authMiddleWare");
 const Student = require("../modals/Student");
 const LeaveApplication = require("../modals/LeaveApplication");
-const {notifyLeaveResponse} = require("../notificationService");
+const {notifyLeaveResponse, notifyLeaveRequested} = require("../notificationService");
 const router = express.Router();
 
 router.post("/applyLeave", authMiddleWare, async (req, res) => {
@@ -43,6 +43,13 @@ router.post("/applyLeave", authMiddleWare, async (req, res) => {
       toDate,
     });
     await newLeaveApplication.save();
+    await notifyLeaveRequested(applicantId, isTeacher ? "teacher" : "student", {
+      name,
+      email,
+      reason,
+      fromDate,
+      toDate,
+    });
     await notifyLeaveResponse(applicantId, isTeacher ? "teacher" : "student", {
       status: "pending",
       adminNote: "Your leave request has been submitted and is awaiting review.",

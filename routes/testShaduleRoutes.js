@@ -19,8 +19,8 @@ router.post("/addTestScheduleByAdmin", authMiddleWare, async (req, res) => {
     if (!classInfo ) {
         return res.status(400).json({ message: "Class entry is required" });
     }
-    if (!title) {
-        return res.status(400).json({ message: "Title is required" });
+    if (!title || !["Mid Term", "Final Term", "Monthly Test", "Weekly Test"].includes(title)) {
+        return res.status(400).json({ message: "Invalid title" });
     }
     if (!Array.isArray(schedules) || !schedules.length) {
         return res.status(400).json({ message: "Schedules array is required" });
@@ -69,6 +69,9 @@ router.put("/updateTestSchedule/:id", authMiddleWare, async (req, res) => {
     const { title, classInfo } = req.body;
     if (!title && !classInfo) {
         return res.status(400).json({ message: "Provide title and/or classInfo to update" });
+    }
+    if (title && !["Mid Term", "Final Term", "Monthly Test", "Weekly Test"].includes(title)) {
+        return res.status(400).json({ message: "Invalid title" });
     }
     try {
         const sheet = await TestShaduleandSyllabus.findById(req.params.id);

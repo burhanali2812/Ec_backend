@@ -98,6 +98,9 @@ async function createNotification({
   });
 }
 
+
+
+
 /**
  * Call this after marks/results are uploaded for a course.
  * studentIds: array of Student _ids who just got a result posted.
@@ -135,12 +138,22 @@ async function notifyFeeGenerated(studentIds, { month }) {
  * adminIds: array of Admin _ids who should be notified.
  * applicantName/applicantRole: who requested the leave, for the message.
  */
-async function notifyLeaveRequested(adminIds, { applicantName, applicantRole }) {
-  const recipients = adminIds.map((id) => ({ id, role: "admin" }));
+async function notifyLeaveRequested(adminIds, {
+  applicantName,
+  applicantRole,
+  email,
+  reason,
+  fromDate,
+  toDate,
+}) {
+  const recipients = adminIds.map((id) => ({
+    id,
+    role: "admin",
+  }));
 
   return createNotification({
     title: "New Leave Request",
-    message: `${applicantName} (${applicantRole}) has submitted a leave request awaiting your review.`,
+    message: `${applicantName} (${applicantRole}) has submitted a leave request from ${fromDate} to ${toDate}. Reason: ${reason}. Please review and respond.`,
     type: "Leave",
     target: "admins",
     recipients,

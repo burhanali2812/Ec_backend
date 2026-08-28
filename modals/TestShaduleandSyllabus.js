@@ -43,6 +43,7 @@ const testScheduleAndSyllabusSchema = new mongoose.Schema(
         title: {
             type: String,
             required: true,
+            enum: ["Mid Term", "Final Term", "Monthly Test", "Weekly Test"],
         },
         schedules: [schedules],
           syllabusUpdatedAt: {
