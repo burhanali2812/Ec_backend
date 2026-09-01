@@ -45,10 +45,15 @@ const TestGeneratorSchema = new mongoose.Schema(
     },
     classInfoId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "ClassInfo",
+      ref: "Class", // was "ClassInfo" — must match the actual model name registered via mongoose.model("Class", ...)
       required: true,
       index: true,
     },
+
+    // Captured in the "Paper Details" step — printed on the exam sheet header
+    subjectLabel: { type: String, trim: true },
+    instructor: { type: String, trim: true },
+    examDate: { type: Date },
 
     // Reflects your 3-step choice
     paperType: {
@@ -96,6 +101,10 @@ const TestGeneratorSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Helps the "resume an existing draft for this course+class" lookup in
+// /start run as an indexed query instead of a full collection scan.
+TestGeneratorSchema.index({ createdBy: 1, courseId: 1, classInfoId: 1, status: 1 });
 
 // Enforce sum(question marks) === totalMarks only when finalizing
 TestGeneratorSchema.pre("validate", function (next) {

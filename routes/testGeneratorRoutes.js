@@ -7,20 +7,14 @@ const Course = require("../modals/Course");
 const Class = require("../modals/Class");
 const authMiddleWare = require("../authMiddleWare");
 
-/**
- * All routes assume authMiddleWare attaches req.user = { id, role, ... }
- * and that req.user.id is the teacher's User _id.
- * Adjust `createdBy: req.user.id` if your auth payload differs.
- */
-
-
-
 // ---------------------------------------------------------------------------
-// STEP 1: Start a new paper (choose course + class) -> creates a draft
+// STEP 1: Start a new paper -> reuses an existing draft for the same
+// course+class if one exists, unless ?force=true is passed.
 // ---------------------------------------------------------------------------
 router.post("/start", authMiddleWare, async (req, res) => {
   try {
     const { courseId, classInfoId } = req.body;
+    const force = req.query.force === "true";
 
     if (!courseId || !classInfoId) {
       return res
@@ -38,25 +32,73 @@ router.post("/start", authMiddleWare, async (req, res) => {
       return res.status(404).json({ success: false, message: "Class not found." });
     }
 
+    if (!force) {
+      const existingDraft = await TestGenerator.findOne({
+        courseId,
+        classInfoId,
+        createdBy: req.user.id,
+        status: "draft",
+      }).sort({ updatedAt: -1 });
+
+      if (existingDraft) {
+        return res.status(200).json({
+          success: true,
+          resumed: true,
+          paper: existingDraft,
+        });
+      }
+    }
+
     const draft = await TestGenerator.create({
       courseId,
       classInfoId,
       createdBy: req.user.id,
       status: "draft",
-      // placeholders required by schema, filled in later steps
       paperType: "MCQ_ONLY",
       totalMarks: 0,
       duration: 0,
     });
 
-    res.status(201).json({ success: true, paper: draft });
+    res.status(201).json({ success: true, resumed: false, paper: draft });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
 // ---------------------------------------------------------------------------
-// STEP 2: Set paper type + total marks + duration
+// NEW STEP: Save subject / instructor / exam date (previously never saved)
+// ---------------------------------------------------------------------------
+router.patch("/:id/details", authMiddleWare, async (req, res) => {
+  try {
+    const { subjectLabel, instructor, examDate } = req.body;
+
+    if (!subjectLabel || !instructor || !examDate) {
+      return res.status(400).json({
+        success: false,
+        message: "subjectLabel, instructor, and examDate are required.",
+      });
+    }
+
+    const paper = await TestGenerator.findOneAndUpdate(
+      { _id: req.params.id, createdBy: req.user.id, status: "draft" },
+      { subjectLabel, instructor, examDate },
+      { new: true }
+    );
+
+    if (!paper) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Draft not found or not editable." });
+    }
+
+    res.status(200).json({ success: true, paper });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// STEP: Set paper type + total marks + duration
 // ---------------------------------------------------------------------------
 router.patch("/:id/type", authMiddleWare, async (req, res) => {
   try {
@@ -90,12 +132,12 @@ router.patch("/:id/type", authMiddleWare, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// STEP 3: Set marks distribution -> auto-generates empty question slots
+// STEP: Marks distribution -> auto-generates empty question slots.
+// MCQ slots now seed 4 blank options instead of an empty array.
 // ---------------------------------------------------------------------------
 router.patch("/:id/distribution", authMiddleWare, async (req, res) => {
   try {
     const { mcq, short, long } = req.body;
-    // Expected shape: { count, marksEach } for each, only send the ones relevant to paperType
 
     const paper = await TestGenerator.findOne({
       _id: req.params.id,
@@ -115,7 +157,6 @@ router.patch("/:id/distribution", authMiddleWare, async (req, res) => {
       long: long || { count: 0, marksEach: 0 },
     };
 
-    // Validate distribution sums to totalMarks
     const computedTotal =
       distribution.mcq.count * distribution.mcq.marksEach +
       distribution.short.count * distribution.short.marksEach +
@@ -128,10 +169,21 @@ router.patch("/:id/distribution", authMiddleWare, async (req, res) => {
       });
     }
 
-    // Build empty question slots so the frontend just fills them in one by one
+    const blankOptions = () => [
+      { text: "", isCorrect: false },
+      { text: "", isCorrect: false },
+      { text: "", isCorrect: false },
+      { text: "", isCorrect: false },
+    ];
+
     const slots = [];
     for (let i = 0; i < distribution.mcq.count; i++) {
-      slots.push({ questionType: "MCQ", questionText: "", marks: distribution.mcq.marksEach, options: [] });
+      slots.push({
+        questionType: "MCQ",
+        questionText: "",
+        marks: distribution.mcq.marksEach,
+        options: blankOptions(),
+      });
     }
     for (let i = 0; i < distribution.short.count; i++) {
       slots.push({ questionType: "Short", questionText: "", marks: distribution.short.marksEach });
@@ -142,7 +194,7 @@ router.patch("/:id/distribution", authMiddleWare, async (req, res) => {
 
     paper.distribution = distribution;
     paper.questions = slots;
-    await paper.save({ validateBeforeSave: false }); // draft, so skip full validation
+    await paper.save({ validateBeforeSave: false });
 
     res.status(200).json({ success: true, paper });
   } catch (err) {
@@ -151,73 +203,17 @@ router.patch("/:id/distribution", authMiddleWare, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// STEP 4a: Fill in ONE question at a time (recommended for wizard UX)
+// STEP: Fill in ONE question at a time
 // ---------------------------------------------------------------------------
-router.patch(
-  "/:id/questions/:questionId",
-  authMiddleWare,
-  async (req, res) => {
-    try {
-      const { questionText, options, modelAnswer, marks } = req.body;
-
-      const paper = await TestGenerator.findOne({
-        _id: req.params.id,
-        createdBy: req.user.id,
-        status: "draft",
-      });
-
-      if (!paper) {
-        return res
-          .status(404)
-          .json({ success: false, message: "Draft not found or not editable." });
-      }
-
-      const question = paper.questions.id(req.params.questionId);
-      if (!question) {
-        return res.status(404).json({ success: false, message: "Question slot not found." });
-      }
-
-      if (question.questionType === "MCQ") {
-        if (!options || options.length < 2) {
-          return res
-            .status(400)
-            .json({ success: false, message: "MCQ needs at least 2 options." });
-        }
-        const correctCount = options.filter((o) => o.isCorrect).length;
-        if (correctCount !== 1) {
-          return res
-            .status(400)
-            .json({ success: false, message: "Exactly one option must be marked correct." });
-        }
-        question.options = options;
-      } else {
-        if (modelAnswer !== undefined) question.modelAnswer = modelAnswer;
-      }
-
-      question.questionText = questionText ?? question.questionText;
-      if (marks !== undefined) question.marks = marks;
-
-      await paper.save({ validateBeforeSave: false });
-
-      res.status(200).json({ success: true, question });
-    } catch (err) {
-      res.status(500).json({ success: false, message: err.message });
-    }
-  }
-);
-
-// ---------------------------------------------------------------------------
-// STEP 4b: Bulk update all questions at once (alternative to one-by-one)
-// ---------------------------------------------------------------------------
-router.put("/:id/questions", authMiddleWare, async (req, res) => {
+router.patch("/:id/questions/:questionId", authMiddleWare, async (req, res) => {
   try {
-    const { questions } = req.body; // full array, replaces existing
+    const { questionText, options, modelAnswer, marks } = req.body;
 
-    const paper = await TestGenerator.findOneAndUpdate(
-      { _id: req.params.id, createdBy: req.user.id, status: "draft" },
-      { questions },
-      { new: true, runValidators: false }
-    );
+    const paper = await TestGenerator.findOne({
+      _id: req.params.id,
+      createdBy: req.user.id,
+      status: "draft",
+    });
 
     if (!paper) {
       return res
@@ -225,14 +221,42 @@ router.put("/:id/questions", authMiddleWare, async (req, res) => {
         .json({ success: false, message: "Draft not found or not editable." });
     }
 
-    res.status(200).json({ success: true, paper });
+    const question = paper.questions.id(req.params.questionId);
+    if (!question) {
+      return res.status(404).json({ success: false, message: "Question slot not found." });
+    }
+
+    if (question.questionType === "MCQ") {
+      const cleanOptions = (options || []).filter((o) => o.text && o.text.trim());
+      if (cleanOptions.length < 2) {
+        return res
+          .status(400)
+          .json({ success: false, message: "MCQ needs at least 2 filled-in options." });
+      }
+      const correctCount = cleanOptions.filter((o) => o.isCorrect).length;
+      if (correctCount !== 1) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Exactly one option must be marked correct." });
+      }
+      question.options = options;
+    } else {
+      if (modelAnswer !== undefined) question.modelAnswer = modelAnswer;
+    }
+
+    question.questionText = questionText ?? question.questionText;
+    if (marks !== undefined) question.marks = marks;
+
+    await paper.save({ validateBeforeSave: false });
+
+    res.status(200).json({ success: true, question });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
 // ---------------------------------------------------------------------------
-// STEP 5: Finalize the paper (locks it, runs full validation)
+// STEP: Finalize — now also checks MCQ options are actually complete
 // ---------------------------------------------------------------------------
 router.patch("/:id/finalize", authMiddleWare, async (req, res) => {
   try {
@@ -248,16 +272,27 @@ router.patch("/:id/finalize", authMiddleWare, async (req, res) => {
         .json({ success: false, message: "Draft not found or already finalized." });
     }
 
-    const incomplete = paper.questions.some((q) => !q.questionText || q.questionText.trim() === "");
-    if (incomplete) {
-      return res.status(400).json({
-        success: false,
-        message: "All question slots must be filled before finalizing.",
-      });
+    for (const q of paper.questions) {
+      if (!q.questionText || !q.questionText.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: "All question slots must be filled before finalizing.",
+        });
+      }
+      if (q.questionType === "MCQ") {
+        const filled = (q.options || []).filter((o) => o.text && o.text.trim());
+        const correctCount = filled.filter((o) => o.isCorrect).length;
+        if (filled.length < 2 || correctCount !== 1) {
+          return res.status(400).json({
+            success: false,
+            message: "Every MCQ needs at least 2 options and exactly one marked correct.",
+          });
+        }
+      }
     }
 
     paper.status = "finalized";
-    await paper.save(); // full validators run here (marks-sum check included)
+    await paper.save();
 
     res.status(200).json({ success: true, paper });
   } catch (err) {
@@ -266,7 +301,7 @@ router.patch("/:id/finalize", authMiddleWare, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// GET: single paper (resume draft or view finalized)
+// GET: single paper
 // ---------------------------------------------------------------------------
 router.get("/:id", authMiddleWare, async (req, res) => {
   try {
@@ -274,7 +309,7 @@ router.get("/:id", authMiddleWare, async (req, res) => {
       _id: req.params.id,
       createdBy: req.user.id,
     })
-      .populate("courseId", "name code")
+      .populate("courseId", "title code")
       .populate("classInfoId", "name");
 
     if (!paper) {
@@ -288,7 +323,7 @@ router.get("/:id", authMiddleWare, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// GET: list all papers by this teacher (optionally filter by course/status)
+// GET: list papers (status=draft or status=finalized via query)
 // ---------------------------------------------------------------------------
 router.get("/", authMiddleWare, async (req, res) => {
   try {
@@ -298,10 +333,10 @@ router.get("/", authMiddleWare, async (req, res) => {
     if (status) filter.status = status;
 
     const papers = await TestGenerator.find(filter)
-      .select("-questions") // keep list view light; fetch full paper via GET /:id
-      .populate("courseId", "name code")
+      .select("-questions")
+      .populate("courseId", "title code")
       .populate("classInfoId", "name")
-      .sort({ createdAt: -1 });
+      .sort({ updatedAt: -1 });
 
     res.status(200).json({ success: true, papers });
   } catch (err) {
@@ -310,7 +345,7 @@ router.get("/", authMiddleWare, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// DELETE: remove a draft (finalized papers probably shouldn't be deletable)
+// DELETE: remove a draft
 // ---------------------------------------------------------------------------
 router.delete("/:id", authMiddleWare, async (req, res) => {
   try {

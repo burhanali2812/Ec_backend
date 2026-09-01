@@ -85,7 +85,7 @@ router.post("/login", async (req, res) => {
         institutionType: teacher.institutionType,
       },
       process.env.JWT_SECRET,
-      { expiresIn: "1h" },
+      { expiresIn: "1d" },
     );
     res.json({ token, success: true, message: "Login successful", user: { id: teacher._id, role: "teacher", email: teacher.email } });
   } catch (error) {
