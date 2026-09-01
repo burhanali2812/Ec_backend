@@ -101,14 +101,14 @@ router.delete("/deleteClass/:classId", authMiddleWare, async (req, res) => {
 });
 
 //get classe s for a teacher
-router.get("/myClasses/:id", authMiddleWare, async (req, res) => {
+router.get("/myClasses", authMiddleWare, async (req, res) => {
     if (req.user.role !== "teacher") {
         return res.status(403).json({
             message: "Unauthorized, You cannot view classes",
             success: false,
         });
     }
-    const courseId = req.params.id;
+    const courseId = req.params.courseId;
     
     try {
       //go to course odel assignment where get the coasses of target class of that teacher and return the classes of that teacher
