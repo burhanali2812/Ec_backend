@@ -2,6 +2,7 @@ const express = require("express");
 const Class = require("../modals/Class");
 const authMiddleWare = require("../authMiddleWare");
 const router = express.Router();
+const Course = require("../modals/Course");
 
 router.post("/addClass", authMiddleWare, async (req, res) => {
   if (req.user.role !== "admin") {
@@ -97,5 +98,35 @@ router.delete("/deleteClass/:classId", authMiddleWare, async (req, res) => {
             success: true,
             data: deletedClass,
         });
+});
+
+//get classe s for a teacher
+router.get("/myClasses/:id", authMiddleWare, async (req, res) => {
+    if (req.user.role !== "teacher") {
+        return res.status(403).json({
+            message: "Unauthorized, You cannot view classes",
+            success: false,
+        });
+    }
+    const courseId = req.params.id;
+    
+    try {
+      //go to course odel assignment where get the coasses of target class of that teacher and return the classes of that teacher
+      const courses = await Course.find({ "assignments.teacher": req.user.id, _id: courseId }).populate("assignments.targetClasses");
+      const classes = courses.flatMap(course => course.assignments.flatMap(assignment => assignment.targetClasses));
+      return res.status(200).json({
+          message: "Classes fetched successfully",
+          success: true,
+          data: classes,
+      });
+    }
+    catch (error) {
+        return res.status(500).json({
+            message: "Error fetching classes",
+            success: false,
+            error: error.message,
+        });
+    }
+
 });
 module.exports = router;
