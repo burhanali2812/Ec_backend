@@ -102,31 +102,47 @@ router.delete("/deleteClass/:classId", authMiddleWare, async (req, res) => {
 
 //get classe s for a teacher
 router.get("/myClasses", authMiddleWare, async (req, res) => {
-    if (req.user.role !== "teacher") {
-        return res.status(403).json({
-            message: "Unauthorized, You cannot view classes",
-            success: false,
-        });
-    }
-    const courseId = req.params.courseId;
-    
-    try {
-      //go to course odel assignment where get the coasses of target class of that teacher and return the classes of that teacher
-      const courses = await Course.find({ "assignments.teacher": req.user.id, _id: courseId }).populate("assignments.targetClasses");
-      const classes = courses.flatMap(course => course.assignments.flatMap(assignment => assignment.targetClasses));
-      return res.status(200).json({
-          message: "Classes fetched successfully",
-          success: true,
-          data: classes,
-      });
-    }
-    catch (error) {
-        return res.status(500).json({
-            message: "Error fetching classes",
-            success: false,
-            error: error.message,
-        });
-    }
+  if (req.user.role !== "teacher") {
+    return res.status(403).json({
+      message: "Unauthorized, You cannot view classes",
+      success: false,
+    });
+  }
 
+  const { courseId } = req.query;
+
+  if (!courseId) {
+    return res.status(400).json({
+      message: "courseId is required",
+      success: false,
+    });
+  }
+
+  try {
+    const courses = await Course.find({
+      _id: courseId,
+      "assignments.teacher": req.user.id,
+    }).populate("assignments.targetClasses");
+
+    // Only pull targetClasses from assignments that belong to THIS teacher,
+    // not every assignment on the course.
+    const classes = courses.flatMap((course) =>
+      course.assignments
+        .filter((a) => a.teacher.toString() === req.user.id.toString())
+        .flatMap((a) => a.targetClasses)
+    );
+
+    return res.status(200).json({
+      message: "Classes fetched successfully",
+      success: true,
+      data: classes,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Error fetching classes",
+      success: false,
+      error: error.message,
+    });
+  }
 });
 module.exports = router;
