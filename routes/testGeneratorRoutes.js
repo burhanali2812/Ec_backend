@@ -13,26 +13,12 @@ const authMiddleWare = require("../authMiddleWare");
  * Adjust `createdBy: req.user.id` if your auth payload differs.
  */
 
-// ---------------------------------------------------------------------------
-// STEP 0: Get courses belonging to the logged-in teacher (for course dropdown)
-// ---------------------------------------------------------------------------
-router.get("/test-generator/my-courses", authMiddleWare, async (req, res) => {
-  try {
-    // Adjust the field name below to match however Course links to a teacher
-    // e.g. Course.teacher, Course.createdBy, or via ClassInfo.teacher
-    const courses = await Course.find({ teacher: req.user.id }).select(
-      "name code _id"
-    );
-    res.status(200).json({ success: true, courses });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-});
+
 
 // ---------------------------------------------------------------------------
 // STEP 1: Start a new paper (choose course + class) -> creates a draft
 // ---------------------------------------------------------------------------
-router.post("/test-generator/start", authMiddleWare, async (req, res) => {
+router.post("/start", authMiddleWare, async (req, res) => {
   try {
     const { courseId, classInfoId } = req.body;
 
@@ -72,7 +58,7 @@ router.post("/test-generator/start", authMiddleWare, async (req, res) => {
 // ---------------------------------------------------------------------------
 // STEP 2: Set paper type + total marks + duration
 // ---------------------------------------------------------------------------
-router.patch("/test-generator/:id/type", authMiddleWare, async (req, res) => {
+router.patch("/:id/type", authMiddleWare, async (req, res) => {
   try {
     const { paperType, totalMarks, duration } = req.body;
 
@@ -106,7 +92,7 @@ router.patch("/test-generator/:id/type", authMiddleWare, async (req, res) => {
 // ---------------------------------------------------------------------------
 // STEP 3: Set marks distribution -> auto-generates empty question slots
 // ---------------------------------------------------------------------------
-router.patch("/test-generator/:id/distribution", authMiddleWare, async (req, res) => {
+router.patch("/:id/distribution", authMiddleWare, async (req, res) => {
   try {
     const { mcq, short, long } = req.body;
     // Expected shape: { count, marksEach } for each, only send the ones relevant to paperType
@@ -168,7 +154,7 @@ router.patch("/test-generator/:id/distribution", authMiddleWare, async (req, res
 // STEP 4a: Fill in ONE question at a time (recommended for wizard UX)
 // ---------------------------------------------------------------------------
 router.patch(
-  "/test-generator/:id/questions/:questionId",
+  "/:id/questions/:questionId",
   authMiddleWare,
   async (req, res) => {
     try {
@@ -223,7 +209,7 @@ router.patch(
 // ---------------------------------------------------------------------------
 // STEP 4b: Bulk update all questions at once (alternative to one-by-one)
 // ---------------------------------------------------------------------------
-router.put("/test-generator/:id/questions", authMiddleWare, async (req, res) => {
+router.put("/:id/questions", authMiddleWare, async (req, res) => {
   try {
     const { questions } = req.body; // full array, replaces existing
 
@@ -248,7 +234,7 @@ router.put("/test-generator/:id/questions", authMiddleWare, async (req, res) => 
 // ---------------------------------------------------------------------------
 // STEP 5: Finalize the paper (locks it, runs full validation)
 // ---------------------------------------------------------------------------
-router.patch("/test-generator/:id/finalize", authMiddleWare, async (req, res) => {
+router.patch("/:id/finalize", authMiddleWare, async (req, res) => {
   try {
     const paper = await TestGenerator.findOne({
       _id: req.params.id,
@@ -282,7 +268,7 @@ router.patch("/test-generator/:id/finalize", authMiddleWare, async (req, res) =>
 // ---------------------------------------------------------------------------
 // GET: single paper (resume draft or view finalized)
 // ---------------------------------------------------------------------------
-router.get("/test-generator/:id", authMiddleWare, async (req, res) => {
+router.get("/:id", authMiddleWare, async (req, res) => {
   try {
     const paper = await TestGenerator.findOne({
       _id: req.params.id,
@@ -304,7 +290,7 @@ router.get("/test-generator/:id", authMiddleWare, async (req, res) => {
 // ---------------------------------------------------------------------------
 // GET: list all papers by this teacher (optionally filter by course/status)
 // ---------------------------------------------------------------------------
-router.get("/test-generator", authMiddleWare, async (req, res) => {
+router.get("/", authMiddleWare, async (req, res) => {
   try {
     const { courseId, status } = req.query;
     const filter = { createdBy: req.user.id };
@@ -326,7 +312,7 @@ router.get("/test-generator", authMiddleWare, async (req, res) => {
 // ---------------------------------------------------------------------------
 // DELETE: remove a draft (finalized papers probably shouldn't be deletable)
 // ---------------------------------------------------------------------------
-router.delete("/test-generator/:id", authMiddleWare, async (req, res) => {
+router.delete("/:id", authMiddleWare, async (req, res) => {
   try {
     const paper = await TestGenerator.findOneAndDelete({
       _id: req.params.id,
