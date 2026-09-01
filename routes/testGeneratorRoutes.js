@@ -4,7 +4,7 @@ const mongoose = require("mongoose");
 
 const TestGenerator = require("../modals/TestGenerator");
 const Course = require("../modals/Course");
-const ClassInfo = require("../modals/ClassInfo"); // adjust name/path if it's actually "Class"
+const Class = require("../modals/Class");
 const authMiddleWare = require("../authMiddleWare");
 
 /**
@@ -33,7 +33,7 @@ router.post("/start", authMiddleWare, async (req, res) => {
       return res.status(404).json({ success: false, message: "Course not found." });
     }
 
-    const classInfo = await ClassInfo.findById(classInfoId);
+    const classInfo = await Class.findById(classInfoId);
     if (!classInfo) {
       return res.status(404).json({ success: false, message: "Class not found." });
     }
