@@ -2,7 +2,7 @@ const TimeTable = require("../modals/TimeTable");
 const Attendance = require("../modals/Attandance");
 const Registration = require("../modals/Registration");
 const AttendanceReminderLog = require("../modals/AttendanceReminderLog");
-const ClassEndReminderLog = require("../modals/ClassEndReminderLog");
+const ClassEndReminderLog = require("../modals/Classendreminderlog");
 const { createNotification } = require("../notificationService");
 
 /* ---------------------------------------------------------------------- */
