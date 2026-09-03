@@ -7,7 +7,7 @@ const cors = require("cors");
 const cron = require("node-cron");
 const moment = require("moment-timezone");
 const { messaging } = require("./services/firebase");
-const { runClassEndingSoonCheck, runEveningCheck } = require("./services/attendanceCronService");
+const { runClassEndingSoonCheck, runEveningCheck } = require("./services/Attendancecronservice");
 
 const app = express();
 
