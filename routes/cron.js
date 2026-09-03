@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { runClassEndingSoonCheck, runEveningCheck } = require("../services/attendanceCronService");
+const { runClassEndingSoonCheck, runEveningCheck } = require("../services/Attendancecronservice");
 
 /**
  * These routes are NOT what triggers the jobs anymore — node-cron in
