@@ -43,7 +43,7 @@ router.post("/signUp", authMiddleWare, async (req, res) => {
 
   try {
     // 2. Strong Check for existing email (Roll number isn't generated yet)
-    const existingStudent = await Student.findOne({ email });
+    const existingStudent = await Student.findOne({ email , isActive:true});
     if (existingStudent) {
       return res.status(400).json({
         message: "Student with this email already exists",
