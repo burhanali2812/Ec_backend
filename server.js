@@ -134,11 +134,7 @@ const generateMonthlyFees = async () => {
   }
 };
 
-/**
- * Manual API trigger — handy for testing / an admin panel button.
- * Not used by any scheduler; the actual monthly run is the node-cron
- * job registered below.
- */
+
 app.post("/api/generate-monthly-fees", async (req, res) => {
   try {
     const result = await generateMonthlyFees();
@@ -148,19 +144,7 @@ app.post("/api/generate-monthly-fees", async (req, res) => {
   }
 });
 
-/**
- * ------------------------------------------------------------------
- * Scheduling — now handled entirely in-process with node-cron.
- *
- * This ONLY works because Hostinger keeps your Node process running
- * continuously (unlike Vercel's serverless functions, which spin up
- * per-request and don't stay alive for a background timer). Since
- * you're on Hostinger now, node-cron is the right tool again.
- *
- * vercel.json is ignored here — Hostinger doesn't read it. Delete it
- * or leave it, it has no effect outside of Vercel.
- * ------------------------------------------------------------------
- */
+
 
 // 1st of every month at 01:00 Karachi time — generate monthly fees.
 cron.schedule(
@@ -189,11 +173,21 @@ cron.schedule(
   { timezone: "Asia/Karachi" }
 );
 
-connectDB();
+connectDB().then(async () => {
 
-// Hostinger's Node hosting (Passenger, or a PM2/systemd process) needs
-// the app to actually listen — unlike Vercel, there's no wrapper doing
-// this for you. Always listen in production too.
+  try {
+    const month = moment().tz("Asia/Karachi").format("YYYY-MM");
+    const anyFeeThisMonth = await StudentFee.exists({ month });
+    if (!anyFeeThisMonth) {
+      console.log(`No fees found for ${month} on startup — running catch-up generation`);
+      await generateMonthlyFees();
+    }
+  } catch (err) {
+    console.error("Startup fee catch-up failed:", err);
+  }
+});
+
+
 app.listen(PORT, () => {
   console.log(`Server running on PORT ${PORT}`);
 });
