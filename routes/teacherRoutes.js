@@ -201,7 +201,7 @@ router.post("/login", async (req, res) => {
       {
         id: teacher._id,
         role: "teacher",
-        institution: selectedInstitution._id,
+        institution: selectedInstitution,
       },
       process.env.JWT_SECRET,
       { expiresIn: "1d" },
@@ -216,10 +216,7 @@ router.post("/login", async (req, res) => {
         role: "teacher",
         email: teacher.email,
         name: teacher.name, 
-        institution: selectedInstitution._id, // still an id, same as before
-        institutionName: selectedInstitution.name,
-        institutionType: selectedInstitution.type,
-        institution: selectedInstitution._id,
+        institution: selectedInstitution,
       },
     });
   } catch (error) {
