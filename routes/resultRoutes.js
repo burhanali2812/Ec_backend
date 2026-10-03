@@ -116,7 +116,7 @@ router.post("/submitResult", authMiddleWare, requireInstitution, async (req, res
         success: false,
       });
     }
-    res.status(500).json({ message: "Server error", success: false });
+    res.status(500).json({ message: "Server error", success: false , error: error.message});
   }
 });
 
