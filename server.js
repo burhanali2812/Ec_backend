@@ -45,6 +45,8 @@ app.use("/api/classes", require("./routes/classRoutes"));
 app.use("/api/notifications", require("./routes/notificationsRoutes"));
 app.use("/api/testScheduleAndSyllabus", require("./routes/testShaduleRoutes"));
 app.use("/api/testGenerator", require("./routes/testGeneratorRoutes"));
+app.use("/api/institution", require("./routes/institutionRoutes"));
+app.use("/api/superAdmin", require("./routes/superAdminRoutes"));
 app.use("/api/cron", require("./routes/cron")); // manual/debug triggers only, see note below
 
 const Registration = require("./modals/Registration");

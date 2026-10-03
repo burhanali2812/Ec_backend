@@ -18,11 +18,7 @@ const registrationSchema = new mongoose.Schema(
       ref: "Student",
       required: true,
     },
-    institutionType: {
-      type: String,
-      enum: ["Academy", "School"],
-      required: true,
-    },
+    institution: {type: mongoose.Schema.Types.ObjectId, ref: "Institution", required: true},
     classInfo: { type: mongoose.Schema.Types.ObjectId, ref: "Class", required: true },
   },
   { timestamps: true },

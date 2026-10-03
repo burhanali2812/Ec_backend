@@ -4,6 +4,20 @@ const Course = require("../modals/Course");
 const authMiddleWare = require("../authMiddleWare");
 const router = express.Router();
 
+/* ------------------------------------------------------------------ */
+/* Helpers                                                              */
+/* ------------------------------------------------------------------ */
+
+const requireInstitution = (req, res, next) => {
+  if (!req.user || !req.user.institution) {
+    return res.status(403).json({
+      message: "Institution missing from your session. Please log in again.",
+      success: false,
+    });
+  }
+  next();
+};
+
 const normalizeAssignments = (
   payloadAssignments = [],
   fallbackClassTarget = [],
@@ -42,7 +56,25 @@ const getAssignmentTeacherIds = (assignments = []) => [
   ),
 ];
 
-router.post("/addCourse", authMiddleWare, async (req, res) => {
+// Confirms every teacher in the assignment list actually belongs to this
+// institution (Teacher.institutions is an array now, since one teacher
+// can teach at more than one institution). Returns the ids that DON'T
+// belong here, so the caller can reject the request with specifics.
+const findTeachersOutsideInstitution = async (teacherIds, institutionId) => {
+  if (!teacherIds.length) return [];
+  const validTeachers = await Teacher.find({
+    _id: { $in: teacherIds },
+    institutions: institutionId,
+  }).select("_id");
+  const validIds = new Set(validTeachers.map((t) => String(t._id)));
+  return teacherIds.filter((id) => !validIds.has(id));
+};
+
+/* ------------------------------------------------------------------ */
+/* Admin: create / update / delete                                     */
+/* ------------------------------------------------------------------ */
+
+router.post("/addCourse", authMiddleWare, requireInstitution, async (req, res) => {
   if (req.user.role !== "admin") {
     return res.status(403).json({
       message: "Unauthorized, You cannot add courses",
@@ -64,10 +96,23 @@ router.post("/addCourse", authMiddleWare, async (req, res) => {
     );
     const teacherIds = getAssignmentTeacherIds(normalizedAssignments);
 
+    const outsideInstitution = await findTeachersOutsideInstitution(
+      teacherIds,
+      req.user.institution._id,
+    );
+    if (outsideInstitution.length) {
+      return res.status(400).json({
+        message: "One or more assigned teachers do not belong to this institution",
+        success: false,
+        teacherIds: outsideInstitution,
+      });
+    }
+
     const newCourse = new Course({
       title,
       description,
       coursePrice: Number(coursePrice) || 0,
+      institution: req.user.institution._id,
       assignments: normalizedAssignments,
     });
     const savedCourse = await newCourse.save();
@@ -87,34 +132,11 @@ router.post("/addCourse", authMiddleWare, async (req, res) => {
   } catch (error) {
     res
       .status(500)
-      .json({ message: "Error linking course", error, success: false });
+      .json({ message: "Error linking course", error: error.message, success: false });
   }
 });
 
-router.get("/myCourses", authMiddleWare, async (req, res) => {
-  try {
-    const courses = await Course.find({
-      "assignments.teacher": req.user.id,
-    }).populate("assignments.teacher", "name email");
-    res.json({ courses, success: true });
-  } catch (error) {
-    res.status(500).json({ message: "Server error", success: false });
-  }
-});
-
-router.get("/allCourses", authMiddleWare, async (req, res) => {
-  try {
-    const courses = await Course.find().populate(
-      "assignments.teacher",
-      "name email",
-    );
-    res.json({ courses, success: true });
-  } catch (error) {
-    res.status(500).json({ message: "Server error", success: false });
-  }
-});
-
-router.put("/updateCourse/:id", authMiddleWare, async (req, res) => {
+router.put("/updateCourse/:id", authMiddleWare, requireInstitution, async (req, res) => {
   if (req.user.role !== "admin") {
     return res.status(403).json({
       message: "Unauthorized, You cannot update courses",
@@ -131,7 +153,10 @@ router.put("/updateCourse/:id", authMiddleWare, async (req, res) => {
   } = req.body;
 
   try {
-    const existingCourse = await Course.findById(id);
+    const existingCourse = await Course.findOne({
+      _id: id,
+      institution: req.user.institution._id,
+    });
     if (!existingCourse) {
       return res
         .status(404)
@@ -147,10 +172,23 @@ router.put("/updateCourse/:id", authMiddleWare, async (req, res) => {
     );
     const nextTeacherIds = getAssignmentTeacherIds(normalizedAssignments);
 
+    const outsideInstitution = await findTeachersOutsideInstitution(
+      nextTeacherIds,
+      req.user.institution._id,
+    );
+    if (outsideInstitution.length) {
+      return res.status(400).json({
+        message: "One or more assigned teachers do not belong to this institution",
+        success: false,
+        teacherIds: outsideInstitution,
+      });
+    }
+
     existingCourse.title = title;
     existingCourse.description = description;
     existingCourse.coursePrice = Number(coursePrice) || 0;
     existingCourse.assignments = normalizedAssignments;
+    // institution is intentionally never reassigned from the request body
     await existingCourse.save();
 
     const removedTeacherIds = previousTeacherIds.filter(
@@ -182,48 +220,85 @@ router.put("/updateCourse/:id", authMiddleWare, async (req, res) => {
   } catch (error) {
     return res
       .status(500)
-      .json({ message: "Error updating course", success: false, error });
+      .json({ message: "Error updating course", success: false, error: error.message });
   }
 });
 
-router.delete("/deleteCourse/:id", authMiddleWare, async (req, res) => {
-  if (req.user.role !== "admin") {
-    return res.status(403).json({
-      message: "Unauthorized, You cannot delete courses",
-      success: false,
-    });
-  }
-  const { id } = req.params;
+router.delete(
+  "/deleteCourse/:id",
+  authMiddleWare,
+  requireInstitution,
+  async (req, res) => {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        message: "Unauthorized, You cannot delete courses",
+        success: false,
+      });
+    }
+    const { id } = req.params;
 
-  try {
-    const course = await Course.findById(id);
-    if (!course) {
+    try {
+      const course = await Course.findOne({
+        _id: id,
+        institution: req.user.institution._id,
+      });
+      if (!course) {
+        return res
+          .status(404)
+          .json({ message: "Course not found", success: false });
+      }
+
+      const teacherIds = getAssignmentTeacherIds(course.assignments || []);
+
+      if (teacherIds.length) {
+        await Teacher.updateMany(
+          { _id: { $in: teacherIds } },
+          { $pull: { courses: course._id } },
+        );
+      }
+
+      await Course.findByIdAndDelete(id);
+
+      return res.json({ message: "Course deleted successfully", success: true });
+    } catch (error) {
       return res
-        .status(404)
-        .json({ message: "Course not found", success: false });
+        .status(500)
+        .json({ message: "Error deleting course", success: false, error: error.message });
     }
+  },
+);
 
-    const teacherIds = getAssignmentTeacherIds(course.assignments || []);
+/* ------------------------------------------------------------------ */
+/* Reads                                                                */
+/* ------------------------------------------------------------------ */
 
-    if (teacherIds.length) {
-      await Teacher.updateMany(
-        { _id: { $in: teacherIds } },
-        { $pull: { courses: course._id } },
-      );
-    }
-
-    await Course.findByIdAndDelete(id);
-
-    return res.json({ message: "Course deleted successfully", success: true });
+// Teacher-facing: courses they're assigned to, at the institution they're
+// currently logged into.
+router.get("/myCourses", authMiddleWare, requireInstitution, async (req, res) => {
+  try {
+    const courses = await Course.find({
+      "assignments.teacher": req.user.id,
+      institution: req.user.institution._id,
+    }).populate("assignments.teacher", "name email");
+    res.json({ courses, success: true });
   } catch (error) {
-    return res
-      .status(500)
-      .json({ message: "Error deleting course", success: false, error });
+    res.status(500).json({ message: "Server error", success: false });
   }
 });
 
-// Get courses for the logged-in teacher
-router.get("/getTeacherCourses", authMiddleWare, async (req, res) => {
+router.get("/allCourses", authMiddleWare, requireInstitution, async (req, res) => {
+  try {
+    const courses = await Course.find({
+      institution: req.user.institution._id,
+    }).populate("assignments.teacher", "name email");
+    res.json({ courses, success: true });
+  } catch (error) {
+    res.status(500).json({ message: "Server error", success: false });
+  }
+});
+
+// Get courses for the logged-in teacher (unpopulated variant)
+router.get("/getTeacherCourses", authMiddleWare, requireInstitution, async (req, res) => {
   if (req.user.role !== "teacher") {
     return res.status(403).json({
       message: "Unauthorized, Only teachers can view their courses",
@@ -234,9 +309,9 @@ router.get("/getTeacherCourses", authMiddleWare, async (req, res) => {
   try {
     const teacherId = req.user.id;
 
-    // Find all courses where this teacher is assigned
     const courses = await Course.find({
       "assignments.teacher": teacherId,
+      institution: req.user.institution._id,
     });
 
     return res.json({
@@ -249,13 +324,14 @@ router.get("/getTeacherCourses", authMiddleWare, async (req, res) => {
     return res.status(500).json({
       message: "Error fetching courses",
       success: false,
-      error,
+      error: error.message,
     });
   }
 });
-router.get("/getAllCourses", authMiddleWare, async (req, res) => {
+
+router.get("/getAllCourses", authMiddleWare, requireInstitution, async (req, res) => {
   try {
-    const courses = await Course.find();
+    const courses = await Course.find({ institution: req.user.institution._id });
     return res.json({
       success: true,
       courses: courses || [],
@@ -266,50 +342,55 @@ router.get("/getAllCourses", authMiddleWare, async (req, res) => {
     return res.status(500).json({
       message: "Error fetching courses",
       success: false,
-      error,
-    });
-  }
-});
-
-// Get courses by class
-router.get("/getClassCourses/:className", authMiddleWare, async (req, res) => {
-  try {
-    if (req.user.role !== "admin") {
-      return res.status(403).json({
-        message: "Unauthorized, Only admins can fetch class attendance",
-        success: false,
-      });
-    }
-    const { className } = req.params;
-
-    if (!className) {
-      return res.status(400).json({
-        message: "Class name is required",
-        success: false,
-      });
-    }
-
-    // Find all courses that have this class in their assignments
-    const courses = await Course.find({
-      "assignments.targetClasses": className,
-    })
-      .select("_id title description coursePrice assignments")
-      .populate("assignments.teacher", "name email");
-
-    res.status(200).json({
-      message: "Courses fetched successfully",
-      success: true,
-      courses: courses || [],
-      count: courses.length,
-    });
-  } catch (error) {
-    console.error("Error fetching class courses:", error);
-    return res.status(500).json({
-      message: "Error fetching courses",
-      success: false,
       error: error.message,
     });
   }
 });
+
+// Get courses by class, scoped to this institution
+router.get(
+  "/getClassCourses/:className",
+  authMiddleWare,
+  requireInstitution,
+  async (req, res) => {
+    try {
+      if (req.user.role !== "admin") {
+        return res.status(403).json({
+          message: "Unauthorized, Only admins can fetch class attendance",
+          success: false,
+        });
+      }
+      const { className } = req.params;
+
+      if (!className) {
+        return res.status(400).json({
+          message: "Class name is required",
+          success: false,
+        });
+      }
+
+      const courses = await Course.find({
+        "assignments.targetClasses": className,
+        institution: req.user.institution._id,
+      })
+        .select("_id title description coursePrice assignments")
+        .populate("assignments.teacher", "name email");
+
+      res.status(200).json({
+        message: "Courses fetched successfully",
+        success: true,
+        courses: courses || [],
+        count: courses.length,
+      });
+    } catch (error) {
+      console.error("Error fetching class courses:", error);
+      return res.status(500).json({
+        message: "Error fetching courses",
+        success: false,
+        error: error.message,
+      });
+    }
+  },
+);
 
 module.exports = router;

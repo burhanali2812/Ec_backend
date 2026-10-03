@@ -4,6 +4,7 @@ const leaveApplicationSchema = new mongoose.Schema({
   applicant: { type: String, enum: ["Student", "Teacher"], required: true },
   studentId: { type: mongoose.Schema.Types.ObjectId, ref: "Student" }, // Reference to student if applicant is Student
   teacherId: { type: mongoose.Schema.Types.ObjectId, ref: "Teacher" }, // Reference to teacher if applicant is Teacher
+   institution: {type: mongoose.Schema.Types.ObjectId, ref: "Institution", required: true},
   name: { type: String, required: true },
   email: { type: String, required: true },
   reason: { type: String, required: true },

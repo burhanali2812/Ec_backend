@@ -39,6 +39,7 @@ const attendanceSchema = new mongoose.Schema({
     ref: "Class",
     required: true,
   },
+   institution: {type: mongoose.Schema.Types.ObjectId, ref: "Institution", required: true},
 
 
 

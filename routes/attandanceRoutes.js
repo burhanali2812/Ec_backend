@@ -3,16 +3,46 @@ const Course = require("../modals/Course");
 const Registration = require("../modals/Registration");
 const Attendance = require("../modals/Attandance");
 const Notification = require("../modals/Notification");
+const Student = require("../modals/Student");
 const authMiddleWare = require("../authMiddleWare");
 const LeaveApplication = require("../modals/LeaveApplication");
-const {notifyAttendanceUploaded} = require("../notificationService");
+const { notifyAttendanceUploaded } = require("../notificationService");
 
 const router = express.Router();
+
+/* ------------------------------------------------------------------ */
+/* Helpers                                                              */
+/* ------------------------------------------------------------------ */
+
+const requireInstitution = (req, res, next) => {
+  if (!req.user || !req.user.institution) {
+    return res.status(403).json({
+      message: "Institution missing from your session. Please log in again.",
+      success: false,
+    });
+  }
+  next();
+};
 
 const findTeacherAssignment = (course, teacherId) => {
   return (course.assignments || []).find(
     (item) => String(item?.teacher?._id || item?.teacher) === String(teacherId),
   );
+};
+
+// A student document now stores classInfo/rollNumber per institution
+// inside "enrollments", not as top-level fields. This pulls out the
+// values for whichever institution this request is scoped to, so
+// existing response shapes (student.rollNumber, student.classInfo)
+// keep working for the frontend unchanged.
+const getEnrollmentFields = (student, institutionId) => {
+  const enrollment = (student?.enrollments || []).find(
+    (e) => e.institution?.toString() === institutionId?.toString(),
+  );
+  return {
+    rollNumber: enrollment?.rollNumber,
+    classInfo: enrollment?.classInfo,
+  };
 };
 
 /**
@@ -40,10 +70,23 @@ const findHolidayForDate = async (dateStr) => {
   }).select("title message date");
 };
 
-router.get("/myCourses", authMiddleWare, async (req, res) => {
+// Confirms an attendance record actually belongs (via its registration)
+// to a student enrolled at this institution. Used by the admin-only
+// delete/update-by-id routes, which previously had no ownership check
+// at all - any admin, at any institution, could act on any attendance
+// record by guessing or being given its ID.
+const attendanceBelongsToInstitution = async (attendance, institutionId) => {
+  if (!attendance) return false;
+  const registration = await Registration.findById(attendance.registration);
+  if (!registration) return false;
+  return registration.institution?.toString() === institutionId?.toString();
+};
+
+router.get("/myCourses", authMiddleWare, requireInstitution, async (req, res) => {
   try {
     const courses = await Course.find({
       "assignments.teacher": req.user.id,
+      institution: req.user.institution,
     }).populate("assignments.teacher", "name email");
 
     return res.json({ success: true, courses });
@@ -52,13 +95,13 @@ router.get("/myCourses", authMiddleWare, async (req, res) => {
   }
 });
 
-router.get("/classes/:courseId", authMiddleWare, async (req, res) => {
+router.get("/classes/:courseId", authMiddleWare, requireInstitution, async (req, res) => {
   try {
     const { courseId } = req.params;
-    const course = await Course.findById(courseId).populate(
-      "assignments.teacher",
-      "name email",
-    );
+    const course = await Course.findOne({
+      _id: courseId,
+      institution: req.user.institution,
+    }).populate("assignments.teacher", "name email");
 
     if (!course) {
       return res
@@ -83,7 +126,7 @@ router.get("/classes/:courseId", authMiddleWare, async (req, res) => {
   }
 });
 
-router.get("/session", authMiddleWare, async (req, res) => {
+router.get("/session", authMiddleWare, requireInstitution, async (req, res) => {
   try {
     let { courseId, classInfo, date, fetchedBy } = req.query;
 
@@ -132,7 +175,10 @@ router.get("/session", authMiddleWare, async (req, res) => {
     const end = new Date(dateObj);
     end.setUTCHours(23, 59, 59, 999);
 
-    const course = await Course.findById(courseId);
+    const course = await Course.findOne({
+      _id: courseId,
+      institution: req.user.institution,
+    });
 
     if (!course) {
       return res.status(404).json({
@@ -168,6 +214,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
 
     const registrations = await Registration.find({
       classInfo,
+      institution: req.user.institution,
       aboutCourse: {
         $elemMatch: { course: courseId },
       },
@@ -244,13 +291,18 @@ router.get("/session", authMiddleWare, async (req, res) => {
           present: 0,
         };
 
+        // rollNumber/classInfo come from this student's enrollment at
+        // THIS institution, since they now vary per institution.
+        const { rollNumber, classInfo: studentClassInfo } =
+          getEnrollmentFields(student, req.user.institution);
+
         return {
           _id: student._id,
           name: student.name,
           email: student.email,
           contact: student.contact,
-          rollNumber: student.rollNumber,
-          classInfo: student.classInfo,
+          rollNumber,
+          classInfo: studentClassInfo,
           fatherName: student.fatherName,
           fatherContact: student.fatherContact,
 
@@ -286,7 +338,7 @@ router.get("/session", authMiddleWare, async (req, res) => {
   }
 });
 
-router.post("/markAttendance", authMiddleWare, async (req, res) => {
+router.post("/markAttendance", authMiddleWare, requireInstitution, async (req, res) => {
   if (req.user.role !== "teacher") {
     return res.status(403).json({
       message: "Unauthorized, You cannot mark attendance",
@@ -335,7 +387,10 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
       });
     }
 
-    const course = await Course.findById(courseId);
+    const course = await Course.findOne({
+      _id: courseId,
+      institution: req.user.institution,
+    });
     if (!course) {
       return res.status(404).json({
         success: false,
@@ -379,6 +434,7 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
       const registration = await Registration.findOne({
         student: studentId,
         classInfo,
+        institution: req.user.institution,
         aboutCourse: { $elemMatch: { course: courseId } },
       });
 
@@ -426,7 +482,15 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
 
       saved.percentage = percentage;
       await saved.save();
-      await notifyAttendanceUploaded([studentId], { courseName: course.title, date: dateObj.toISOString().split("T")[0] });
+      // FIXED: notifyAttendanceUploaded now requires an institution
+      // (Notification.institution is required: true on the schema).
+      // course.institution is already on hand here since courses are
+      // institution-scoped.
+      await notifyAttendanceUploaded([studentId], {
+        courseName: course.title,
+        date: dateObj.toISOString().split("T")[0],
+        institution: course.institution,
+      });
 
       savedRecords.push(saved);
     }
@@ -446,82 +510,127 @@ router.post("/markAttendance", authMiddleWare, async (req, res) => {
 });
 
 const ALLOWED_STATUSES = ["present", "absent", "onLeave"];
-router.post("/updateAttendanceByStudent", authMiddleWare, async (req, res) => {
-  if(req.user.role !== "teacher" && Course.assignments.includes(req.user.id) === false){
-    return res.status(403).json({
-      success: false,
-      message: "Unauthorized, Only teachers can update attendance by student",
-    });
-  }
-  try {
-    const { studentId, courseId, classInfo, date, status } = req.body;
-
-    if (!studentId || !courseId || !classInfo || !date || !status) {
-      return res.status(400).json({
+router.post(
+  "/updateAttendanceByStudent",
+  authMiddleWare,
+  requireInstitution,
+  async (req, res) => {
+    // FIXED: the old check was `Course.assignments.includes(req.user.id)`,
+    // which reads a property on the Mongoose MODEL (not a document) -
+    // `Course.assignments` is always undefined, so `.includes` would throw
+    // or the condition would never meaningfully pass. This now does the
+    // real check: only a teacher actually assigned to this course+class
+    // (or an admin) may update a single student's attendance.
+    if (req.user.role !== "teacher" && req.user.role !== "admin") {
+      return res.status(403).json({
         success: false,
-        message:
-          "studentId, courseId, classInfo, date, and status are all required.",
+        message: "Unauthorized, Only teachers or admins can update attendance by student",
       });
     }
 
-    if (!ALLOWED_STATUSES.includes(status)) {
-      return res.status(400).json({
-        success: false,
-        message: `status must be one of: ${ALLOWED_STATUSES.join(", ")}`,
+    try {
+      const { studentId, courseId, classInfo, date, status } = req.body;
+
+      if (!studentId || !courseId || !classInfo || !date || !status) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "studentId, courseId, classInfo, date, and status are all required.",
+        });
+      }
+
+      if (!ALLOWED_STATUSES.includes(status)) {
+        return res.status(400).json({
+          success: false,
+          message: `status must be one of: ${ALLOWED_STATUSES.join(", ")}`,
+        });
+      }
+
+      const course = await Course.findOne({
+        _id: courseId,
+        institution: req.user.institution,
       });
-    }
+      if (!course) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Course not found" });
+      }
 
-    const registration = await Registration.findOne({
-      student: studentId,
-      aboutCourse: { $elemMatch: { course: courseId } },
-    });
+      if (req.user.role === "teacher") {
+        const teacherAssignment = findTeacherAssignment(course, req.user.id);
+        if (!teacherAssignment) {
+          return res
+            .status(403)
+            .json({ success: false, message: "Not allowed" });
+        }
+        const allowedClasses = new Set(
+          (teacherAssignment.targetClasses || []).map(String),
+        );
+        if (!allowedClasses.has(String(classInfo))) {
+          return res
+            .status(403)
+            .json({ success: false, message: "Class not assigned to you" });
+        }
+      }
 
+      const registration = await Registration.findOne({
+        student: studentId,
+        institution: req.user.institution,
+        aboutCourse: { $elemMatch: { course: courseId } },
+      });
 
- 
+      if (!registration) {
+        return res.status(404).json({
+          success: false,
+          message: "Registration not found for this student and course",
+        });
+      }
 
-    const updated = await Attendance.findOneAndUpdate(
-      {
-        registration: registration._id,
-        course: courseId,
-        classInfo: classInfo,
-        date: date,
-      },
-      {
-        $set: { status },
-        $setOnInsert: {
-          student: studentId,
+      const updated = await Attendance.findOneAndUpdate(
+        {
+          registration: registration._id,
           course: courseId,
           classInfo: classInfo,
           date: date,
         },
-      },
-      {
-        upsert: true,
-        new: true,
-      },
-    );
+        {
+          $set: { status },
+          $setOnInsert: {
+            student: studentId,
+            course: courseId,
+            classInfo: classInfo,
+            date: date,
+          },
+        },
+        {
+          upsert: true,
+          new: true,
+        },
+      );
 
-    return res.status(200).json({
-      success: true,
-      message: "Attendance updated successfully",
-      attendance: updated,
-    });
-  } catch (error) {
-    console.error("Error updating attendance by student:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
-});
+      return res.status(200).json({
+        success: true,
+        message: "Attendance updated successfully",
+        attendance: updated,
+      });
+    } catch (error) {
+      console.error("Error updating attendance by student:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Server error",
+      });
+    }
+  },
+);
 
-router.get("/studentStats/:courseId", authMiddleWare, async (req, res) => {
+router.get("/studentStats/:courseId", authMiddleWare, requireInstitution, async (req, res) => {
   try {
     const { courseId } = req.params;
     const studentId = req.user.id;
 
     const registration = await Registration.findOne({
       student: studentId,
+      institution: req.user.institution,
       aboutCourse: { $elemMatch: { course: courseId } },
     });
 
@@ -665,6 +774,7 @@ router.get("/studentStats/:courseId", authMiddleWare, async (req, res) => {
 router.get(
   "/getClassAttendance/:className",
   authMiddleWare,
+  requireInstitution,
   async (req, res) => {
     try {
       if (req.user.role !== "admin") {
@@ -700,16 +810,20 @@ router.get(
         }
       }
 
-      const Student = require("../modals/Student");
-
+      // FIXED: classInfo/isActive now live inside enrollments, scoped per
+      // institution, so this can no longer query Student.find({classInfo})
+      // directly - it has to match the enrollment for THIS institution.
       const students = await Student.find({
-        classInfo: className,
+        enrollments: {
+          $elemMatch: { classInfo: className, institution: req.user.institution },
+        },
       });
 
       const studentIds = students.map((s) => s._id);
 
       const registrations = await Registration.find({
         student: { $in: studentIds },
+        institution: req.user.institution,
       });
 
       const registrationIds = registrations.map((r) => r._id);
@@ -729,7 +843,7 @@ router.get(
           select: "student",
           populate: {
             path: "student",
-            select: "name rollNumber classInfo",
+            select: "name enrollments",
           },
         })
         .populate("course", "title")
@@ -737,11 +851,15 @@ router.get(
 
       const formattedAttendance = attendanceRecords.map((record) => {
         const d = new Date(record.date);
+        const studentDoc = record.registration?.student;
+        const { rollNumber } = studentDoc
+          ? getEnrollmentFields(studentDoc, req.user.institution)
+          : {};
 
         return {
           _id: record._id,
-          studentName: record.registration?.student?.name || "N/A",
-          rollNumber: record.registration?.student?.rollNumber || "N/A",
+          studentName: studentDoc?.name || "N/A",
+          rollNumber: rollNumber || "N/A",
           courseName: record.course?.title || "N/A",
 
           // UTC SAFE DATE
@@ -771,8 +889,7 @@ router.get(
 );
 
 // Get student attendance by student ID
-
-router.get("/getStudentAttendance", authMiddleWare, async (req, res) => {
+router.get("/getStudentAttendance", authMiddleWare, requireInstitution, async (req, res) => {
   try {
     if (req.user.role !== "admin" && req.user.role !== "teacher") {
       return res.status(403).json({
@@ -791,9 +908,11 @@ router.get("/getStudentAttendance", authMiddleWare, async (req, res) => {
       });
     }
 
-    // Get all registrations for this student
+    // Scoped to THIS institution, so a student enrolled at both School
+    // and Academy doesn't show mixed attendance from both.
     const registrations = await Registration.find({
       student: studentId,
+      institution: req.user.institution,
     });
     const registrationIds = registrations.map((r) => r._id);
     console.log("Registrations found:", registrations.length);
@@ -842,7 +961,7 @@ router.get("/getStudentAttendance", authMiddleWare, async (req, res) => {
         select: "student",
         populate: {
           path: "student",
-          select: "name rollNumber classInfo email contact",
+          select: "name email contact enrollments",
         },
       })
       .sort({ date: -1 });
@@ -871,6 +990,7 @@ router.get("/getStudentAttendance", authMiddleWare, async (req, res) => {
 router.delete(
   "/deleteAttendance/:attendanceId",
   authMiddleWare,
+  requireInstitution,
   async (req, res) => {
     try {
       if (req.user.role !== "admin") {
@@ -881,13 +1001,29 @@ router.delete(
       }
       const { attendanceId } = req.params;
 
-      const deleted = await Attendance.findByIdAndDelete(attendanceId);
-      if (!deleted) {
+      const attendance = await Attendance.findById(attendanceId);
+      if (!attendance) {
         return res.status(404).json({
           message: "Attendance record not found",
           success: false,
         });
       }
+
+      // FIXED: previously any admin could delete any attendance record by
+      // ID, with no check that it belonged to their own institution.
+      const owned = await attendanceBelongsToInstitution(
+        attendance,
+        req.user.institution,
+      );
+      if (!owned) {
+        return res.status(404).json({
+          message: "Attendance record not found",
+          success: false,
+        });
+      }
+
+      await Attendance.findByIdAndDelete(attendanceId);
+
       return res.status(200).json({
         message: "Attendance record deleted successfully",
         success: true,
@@ -906,6 +1042,7 @@ router.delete(
 router.post(
   "/updateAttendance/:attendanceId",
   authMiddleWare,
+  requireInstitution,
   async (req, res) => {
     try {
       if (req.user.role !== "admin") {
@@ -934,12 +1071,17 @@ router.post(
         });
       }
 
-      const nowUTC = Date.now();
-      const recordUTC = new Date(attendanceRecord.date).getTime();
-
-      const hoursDifference = (nowUTC - recordUTC) / (1000 * 60 * 60);
-
-    
+      // FIXED: same missing ownership check as deleteAttendance above.
+      const owned = await attendanceBelongsToInstitution(
+        attendanceRecord,
+        req.user.institution,
+      );
+      if (!owned) {
+        return res.status(404).json({
+          message: "Attendance record not found",
+          success: false,
+        });
+      }
 
       const totalRecords = await Attendance.countDocuments({
         registration: attendanceRecord.registration,
@@ -996,6 +1138,7 @@ router.post(
 router.put(
   "/updateLeaveAttendance/:studentId",
   authMiddleWare,
+  requireInstitution,
   async (req, res) => {
     if (req.user.role !== "admin") {
       return res.status(401).json({
@@ -1025,22 +1168,21 @@ router.put(
       // Convert future endDate to yesterday
       const today = new Date();
 
-      if (new Date(endDate) >= today && new Date().getHours() <= 16 ) {
+      if (new Date(endDate) >= today && new Date().getHours() <= 16) {
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
 
         endDate = yesterday.toISOString().split("T")[0];
       }
-      //check if the api request is 9pm today then the end date become today 
-   
+      //check if the api request is 9pm today then the end date become today
 
-        if(new Date().getHours() >= 16 && new Date(endDate) >= today){ 
-          endDate = today.toISOString().split("T")[0];
-        }
-        //if end date is before today then no change needed
-        if(new Date(endDate) < today){
-          endDate = endDate;
-        }
+      if (new Date().getHours() >= 16 && new Date(endDate) >= today) {
+        endDate = today.toISOString().split("T")[0];
+      }
+      //if end date is before today then no change needed
+      if (new Date(endDate) < today) {
+        endDate = endDate;
+      }
       // Validate startDate
       if (new Date(startDate) > today) {
         return res.status(400).json({
@@ -1057,8 +1199,12 @@ router.put(
         });
       }
 
+      // Scoped to THIS institution - otherwise a student enrolled at two
+      // institutions could have attendance at BOTH wiped to "onLeave" by
+      // one admin's action.
       const registrations = await Registration.find({
         student: studentId,
+        institution: req.user.institution,
       }).select("_id");
 
       if (!registrations.length) {

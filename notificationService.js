@@ -4,15 +4,37 @@ const Teacher = require("./modals/Teacher");
 const Admin = require("./modals/Admin");
 const messaging = require("./services/firebase").messaging;
 
+// Accepts either a raw institution ObjectId/string, or a populated
+// Institution document (which has ._id and .type). Normalizes to just
+// the id, which is all the Notification schema's "institution" field
+// (required: true) needs.
+const resolveInstitutionId = (institution) => {
+  if (!institution) return null;
+  return institution._id || institution;
+};
+
 async function createNotification({
   title,
   message,
   type,
   target,
+  institution,
   recipients,
 }) {
   if (!recipients || recipients.length === 0) {
     console.warn(`Notification "${title}" skipped — no recipients given.`);
+    return null;
+  }
+
+  const institutionId = resolveInstitutionId(institution);
+  if (!institutionId) {
+    // FIXED: "institution" is required: true on the Notification schema.
+    // Every createNotification call now MUST supply one, or the
+    // Notification.create below throws a validation error - this check
+    // fails fast with a clearer message instead of a raw Mongoose error.
+    console.error(
+      `Notification "${title}" skipped — institution is required but was not provided.`,
+    );
     return null;
   }
 
@@ -88,6 +110,7 @@ async function createNotification({
     message,
     type,
     target,
+    institution: institutionId,
     publishedBy: "system",
 
     recipients: recipients.map((r) => ({
@@ -104,8 +127,9 @@ async function createNotification({
 /**
  * Call this after marks/results are uploaded for a course.
  * studentIds: array of Student _ids who just got a result posted.
+ * institution: the institution this result belongs to (required).
  */
-async function notifyResultUploaded(studentIds, { courseName, dateOfExam }) {
+async function notifyResultUploaded(studentIds, { courseName, dateOfExam, institution }) {
   const recipients = studentIds.map((id) => ({ id, role: "student" }));
 
   return createNotification({
@@ -113,6 +137,7 @@ async function notifyResultUploaded(studentIds, { courseName, dateOfExam }) {
     message: `Your result for ${courseName} on ${dateOfExam} has been uploaded. Check the Results section for details.`,
     type: "Result",
     target: "students",
+    institution,
     recipients,
   });
 }
@@ -120,8 +145,9 @@ async function notifyResultUploaded(studentIds, { courseName, dateOfExam }) {
 /**
  * Call this after monthly fee generation creates fee records.
  * studentIds: array of Student _ids who just had a fee voucher created.
+ * institution: the institution this fee belongs to (required).
  */
-async function notifyFeeGenerated(studentIds, { month }) {
+async function notifyFeeGenerated(studentIds, { month, institution }) {
   const recipients = studentIds.map((id) => ({ id, role: "student" }));
 
   return createNotification({
@@ -129,6 +155,7 @@ async function notifyFeeGenerated(studentIds, { month }) {
     message: `Your fee for ${month} has been generated. Please check the Fee section for the amount and due date.`,
     type: "Fee",
     target: "students",
+    institution,
     recipients,
   });
 }
@@ -137,22 +164,34 @@ async function notifyFeeGenerated(studentIds, { month }) {
  * Call this when a student or teacher submits a leave request.
  * adminIds: array of Admin _ids who should be notified.
  * applicantName/applicantRole: who requested the leave, for the message.
+ * institution: the institution the applicant belongs to (required) -
+ * accepts either a raw id or a populated Institution doc; if populated,
+ * its .type is used to make the message more specific.
  */
 async function notifyLeaveRequested(
   adminId,
   {
     applicantName,
     applicantRole,
+    institution,
     reason,
     fromDate,
     toDate,
   }
 ) {
+  // FIXED: the old message referenced `institutiionType`, a variable
+  // that was never defined anywhere in this file (typo for something
+  // like `institution.type`) - every call to this function would have
+  // thrown a ReferenceError. Built safely here: only mentions the
+  // institution by name if a populated doc (with .type) was passed in.
+  const institutionLabel = institution?.type ? ` from ${institution.type}` : "";
+
   return createNotification({
     title: "New Leave Request",
-    message: `${applicantName} (${applicantRole}) has submitted a leave request from ${fromDate} to ${toDate}. Reason: ${reason}. Please review and respond.`,
+    message: `${applicantName} (${applicantRole})${institutionLabel} has submitted a leave request from ${fromDate} to ${toDate}. Reason: ${reason}. Please review and respond.`,
     type: "Leave",
     target: "admins",
+    institution,
     recipients: [
       {
         id: adminId,
@@ -161,7 +200,7 @@ async function notifyLeaveRequested(
     ],
   });
 }
-async function notifyAttendanceUploaded(studentIds, { courseName, date }  )    {
+async function notifyAttendanceUploaded(studentIds, { courseName, date, institution })    {
     const recipients = studentIds.map((id) => ({ id, role: "student" }));
 
     return createNotification({
@@ -169,6 +208,7 @@ async function notifyAttendanceUploaded(studentIds, { courseName, date }  )    {
         message: `Attendance for ${courseName} on ${date} has been uploaded. Please check the Attendance section for details.`,
         type: "Attendance",
         target: "students",
+        institution,
         recipients,
     });
 }
@@ -176,11 +216,13 @@ async function notifyAttendanceUploaded(studentIds, { courseName, date }  )    {
 /**
  * Call this when an admin approves or rejects a leave request.
  * applicantId/applicantRole: the student or teacher who applied.
- * status: "approved" | "rejected"
+ * institution: the institution the applicant belongs to (required).
+ * status: "approved" | "rejected" | "pending"
  */
 async function notifyLeaveResponse(
   applicantId,
   applicantRole,
+  institution,
   { status, adminNote }
 ) {
   let title;
@@ -209,6 +251,7 @@ async function notifyLeaveResponse(
     title,
     message,
     type: "Leave",
+    institution,
     target: applicantRole === "teacher" ? "teachers" : "students",
     recipients: [
       {
@@ -220,6 +263,12 @@ async function notifyLeaveResponse(
 }
 
 //notifybyadmin just firebase notification to student or teacher when admin send notification to them
+// NOTE: this one does NOT call createNotification / Notification.create
+// (no DB record is written here, only a push notification is sent), so
+// the institution-required schema change does not affect it. If you
+// later want these to also persist as Notification documents, route
+// them through createNotification with an institution like the other
+// helpers above.
 async function notifyByAdmin(recipients, { title, message, type }) {
 
    if (!recipients || recipients.length === 0) {

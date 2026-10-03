@@ -12,6 +12,7 @@ const studentFeeSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+     institution: {type: mongoose.Schema.Types.ObjectId, ref: "Institution", required: true},
 
     actualFee: {
       type: Number,

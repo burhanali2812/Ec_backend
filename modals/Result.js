@@ -12,6 +12,7 @@ const resultSchema = new mongoose.Schema(
       ref: "Course",
       required: true,
     },
+     institution: {type: mongoose.Schema.Types.ObjectId, ref: "Institution", required: true},
     marksObtained: { type: Number, required: true },
     dateOfExam: { type: Date, required: true },
     topic: { type: String, required: true },

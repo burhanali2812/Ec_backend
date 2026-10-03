@@ -323,6 +323,7 @@ router.get("/", authMiddleWare, async (req, res) => {
       recipients: {
         $elemMatch: { id: req.user.id, role: req.user.role },
       },
+      institution: req.user.institution._id,
     })
       .select("title message type date createdAt recipients")
       .sort({ createdAt: -1 });

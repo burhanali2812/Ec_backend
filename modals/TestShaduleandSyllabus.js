@@ -39,6 +39,7 @@ const testScheduleAndSyllabusSchema = new mongoose.Schema(
             ref: "Class",
             required: true,
         },
+        institution: {type: mongoose.Schema.Types.ObjectId, ref: "Institution", required: true},
        
         title: {
             type: String,
@@ -56,9 +57,4 @@ const testScheduleAndSyllabusSchema = new mongoose.Schema(
     { timestamps: true }
 );
 
-const TestShaduleandSyllabus = mongoose.model(
-    "TestShaduleandSyllabus",
-    testScheduleAndSyllabusSchema
-);
-
-module.exports = TestShaduleandSyllabus;
+module.exports = mongoose.model("TestScheduleAndSyllabus", testScheduleAndSyllabusSchema);

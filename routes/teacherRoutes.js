@@ -8,94 +8,231 @@ const authMiddleWare = require("../authMiddleWare");
 const Class = require("../modals/Class");
 const router = express.Router();
 
-router.post("/signUp", async (req, res) => {
-  {
-    const { name, contact, email, cnic, address, institutionType, salary } =
-      req.body;
-    if (
-      !name ||
-      !contact ||
-      !email ||
-      !cnic ||
-      !address ||
-      !institutionType ||
-      !salary
-    ) {
-      return res
-        .status(400)
-        .json({ message: "All fields are required", success: false });
-    }
-    try {
-      // Check if teacher already exists
-      let teacher = await Teacher.findOne({ email, cnic, contact });
-      if (teacher) {
-        return res
-          .status(400)
-          .json({
-            message: "Teacher already exists on this email, CNIC, or contact",
-            success: false,
-          });
+/* ------------------------------------------------------------------ */
+/* Institution helper                                                  */
+/* ------------------------------------------------------------------ */
+
+// req.user.institution means "the institution this session is currently
+// acting as" (chosen at login), not the teacher's full institutions list.
+const requireInstitution = (req, res, next) => {
+  if (!req.user || !req.user.institution) {
+    return res.status(403).json({
+      message: "Institution missing from your session. Please log in again.",
+      success: false,
+    });
+  }
+  next();
+};
+
+/* ------------------------------------------------------------------ */
+/* Sign up / login / profile                                           */
+/* ------------------------------------------------------------------ */
+
+router.post("/signUp", authMiddleWare, requireInstitution, async (req, res) => {
+  if (req.user.role !== "admin") {
+    return res.status(403).json({ success: false, message: "Access denied" });
+  }
+
+  const { name, contact, email, cnic, address, salary } = req.body;
+  if (!name || !contact || !email || !cnic || !address || !salary) {
+    return res
+      .status(400)
+      .json({ message: "All fields are required", success: false });
+  }
+
+  try {
+    const currentInstitution = req.user.institution;
+
+    // Same person is identified by CNIC across the whole system.
+    let teacher = await Teacher.findOne({ cnic });
+
+    if (teacher) {
+      const alreadyHere = teacher.institutions.some(
+        (id) => id.toString() === currentInstitution.toString(),
+      );
+      if (alreadyHere) {
+        return res.status(400).json({
+          message: "Teacher already exists at this institution",
+          success: false,
+        });
       }
-      // Create new teacher
-      const password = cnic.slice(-6) + "@" + name.slice(0, 3);
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(password, salt);
-      teacher = new Teacher({
-        name,
-        contact,
-        email,
-        cnic,
-        password: hashedPassword,
-        address,
-        institutionType,
+
+      // Same person, joining a second institution. Email/contact should
+      // match the existing record; if they don't, this might be a
+      // different person who happens to share a CNIC typo, so we stop
+      // and ask for it to be corrected explicitly rather than merging.
+      if (teacher.email !== email || teacher.contact !== contact) {
+        return res.status(400).json({
+          message:
+            "A teacher with this CNIC already exists with a different email or contact. Update their existing profile instead of creating a new one.",
+          success: false,
+        });
+      }
+
+      teacher.institutions.push(currentInstitution);
+      teacher.salaryByInstitution.push({
+        institution: currentInstitution,
         salary,
       });
       await teacher.save();
-      res
-        .status(201)
-        .json({ message: "Teacher created successfully", success: true });
-    } catch (error) {
-      res.status(500).json({ message: "Server error", success: false });
+
+      return res.status(200).json({
+        message: "Existing teacher added to this institution",
+        success: true,
+      });
     }
+
+    // Brand new teacher.
+    const password = cnic.slice(-6) + "@" + name.slice(0, 3);
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    teacher = new Teacher({
+      name,
+      contact,
+      email,
+      cnic,
+      password: hashedPassword,
+      address,
+      institutions: [currentInstitution],
+      salaryByInstitution: [{ institution: currentInstitution, salary }],
+    });
+    await teacher.save();
+
+    res
+      .status(201)
+      .json({ message: "Teacher created successfully", success: true });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({
+        message: "A teacher with this email or CNIC already exists",
+        success: false,
+      });
+    }
+    res.status(500).json({ message: "Server error", success: false });
   }
 });
 
+
+
+const INSTITUTION_TYPES = ["School", "College", "University", "Academy", "Other"];
+const OBJECT_ID_REGEX = /^[0-9a-fA-F]{24}$/;
+
 router.post("/login", async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password, institution } = req.body; // "school" / "academy"
+
+  if (!email || !password || !institution) {
+    return res.status(400).json({
+      message: "Email, password and institution are required",
+      success: false,
+    });
+  }
+
+  const rawInstitution = String(institution).trim();
+  const isId = OBJECT_ID_REGEX.test(rawInstitution);
+
+  // Normalise "school" / "SCHOOL" / "School" -> "School" (must match the schema enum)
+  const institutionType = isId
+    ? null
+    : INSTITUTION_TYPES.find(
+        (t) => t.toLowerCase() === rawInstitution.toLowerCase(),
+      );
+
+  if (!isId && !institutionType) {
+    return res.status(400).json({
+      message: `Invalid institution. Allowed: ${INSTITUTION_TYPES.join(", ")}`,
+      success: false,
+    });
+  }
+
   try {
-    // Check if teacher exists
-    const teacher = await Teacher.findOne({ email });
+    // populate so we can read each institution's `type`
+    const teacher = await Teacher.findOne({ email }).populate(
+      "institutions",
+      "name type",
+    );
     if (!teacher) {
       return res
         .status(400)
         .json({ message: "No teacher found on this email", success: false });
     }
-    // Check password
+
+    // Check the password BEFORE revealing anything about institutions
     const isMatch = await bcrypt.compare(password, teacher.password);
     if (!isMatch) {
       return res
         .status(400)
         .json({ message: "Invalid credentials", success: false });
     }
-    // Generate token
+
+    // filter(Boolean) guards against institutions that were deleted
+    const matching = teacher.institutions.filter((inst) => {
+      if (!inst) return false;
+      return isId
+        ? String(inst._id) === rawInstitution
+        : inst.type === institutionType;
+    });
+
+    if (matching.length === 0) {
+      return res.status(400).json({
+        message: isId
+          ? "This teacher is not registered at this institution"
+          : `This teacher is not registered at any ${institutionType}`,
+        success: false,
+      });
+    }
+
+    // Teacher has 2+ institutions of the same type (e.g. two academies).
+    // Frontend shows this list, then logs in again sending the picked id
+    // in the same `institution` field.
+    if (matching.length > 1) {
+      return res.status(409).json({
+        success: false,
+        requiresInstitutionSelection: true,
+        message: `You belong to multiple ${institutionType}s. Please select one.`,
+        institutions: matching.map((i) => ({ id: i._id, name: i.name })),
+      });
+    }
+
+    const selectedInstitution = matching[0];
+
+    // "institution" in the token = the one chosen for THIS session.
     const token = jwt.sign(
       {
         id: teacher._id,
         role: "teacher",
-        institutionType: teacher.institutionType,
+        institution: selectedInstitution._id,
       },
       process.env.JWT_SECRET,
       { expiresIn: "1d" },
     );
-    res.json({ token, success: true, message: "Login successful", user: { id: teacher._id, role: "teacher", email: teacher.email } });
+
+    res.json({
+      token,
+      success: true,
+      message: "Login successful",
+      user: {
+        id: teacher._id,
+        role: "teacher",
+        email: teacher.email,
+        name: teacher.name, 
+        institution: selectedInstitution._id, // still an id, same as before
+        institutionName: selectedInstitution.name,
+        institutionType: selectedInstitution.type,
+        institution: selectedInstitution._id,
+      },
+    });
   } catch (error) {
     res.status(500).json({ message: "Server error", success: false });
   }
 });
 
-router.get("/profile", authMiddleWare, async (req, res) => {
+router.get("/profile", authMiddleWare, requireInstitution, async (req, res) => {
   try {
-    const teacher = await Teacher.findById(req.user.id).select("-password");
+    const teacher = await Teacher.findOne({
+      _id: req.user.id,
+      institutions: req.user.institution,
+    }).select("-password");
     if (!teacher) {
       return res
         .status(404)
@@ -107,83 +244,179 @@ router.get("/profile", authMiddleWare, async (req, res) => {
   }
 });
 
-router.get("/getAllTeachers", authMiddleWare, async (req, res) => {
-  const { institutionType } = req.query;
-  if (!institutionType) {
-    return res
-      .status(400)
-      .json({ message: "Institution type is required", success: false });
-  }
+/* ------------------------------------------------------------------ */
+/* Teacher management                                                  */
+/* ------------------------------------------------------------------ */
+
+// Looks up a teacher GLOBALLY by CNIC (not scoped to this institution),
+// so the admin form can autofill name/email/contact/address for a teacher
+// who already exists at a different institution. Salary is intentionally
+// left out of the response - it's always institution-specific.
+router.get(
+  "/lookupByCnic/:cnic",
+  authMiddleWare,
+  requireInstitution,
+  async (req, res) => {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ message: "Access denied", success: false });
+    }
+    try {
+      const { cnic } = req.params;
+      if (!cnic) {
+        return res
+          .status(400)
+          .json({ message: "CNIC is required", success: false });
+      }
+
+      const teacher = await Teacher.findOne({ cnic }).select(
+        "name email contact address institutions",
+      );
+
+      if (!teacher) {
+        return res.json({ success: true, found: false });
+      }
+
+      const alreadyAtThisInstitution = teacher.institutions.some(
+        (id) => id.toString() === req.user.institution.toString(),
+      );
+
+      return res.json({
+        success: true,
+        found: true,
+        alreadyAtThisInstitution,
+        teacher: {
+          name: teacher.name,
+          email: teacher.email,
+          contact: teacher.contact,
+          address: teacher.address,
+        },
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Server error", success: false });
+    }
+  },
+);
+
+router.get("/getAllTeachers", authMiddleWare, requireInstitution, async (req, res) => {
   try {
     const teachers = await Teacher.find({
-      institutionType: institutionType,
+      institutions: req.user.institution,
     }).select("-password");
     if (teachers.length === 0) {
-      return res
-        .status(404)
-        .json({
-          message: "No teachers found for this institution type",
-          success: false,
-        });
+      return res.status(404).json({
+        message: "No teachers found for this institution",
+        success: false,
+      });
     }
     res.json({ teachers, success: true });
   } catch (error) {
     res.status(500).json({ message: "Server error", success: false });
   }
 });
-router.delete("/deleteTeacher/:id", authMiddleWare, async (req, res) => {
-  try {
-    const teacher = await Teacher.findByIdAndDelete(req.params.id);
-    if (!teacher) {
-      return res
-        .status(404)
-        .json({ message: "Teacher not found", success: false });
-    }
-    res.json({ message: "Teacher deleted successfully", success: true });
-  } catch (error) {
-    res.status(500).json({ message: "Server error", success: false });
-  }
-});
 
-router.put("/updateTeacher/:id", authMiddleWare, async (req, res) => {
-  const { name, contact, email, cnic, address, institutionType, salary } =
-    req.body;
-  if (
-    !name ||
-    !contact ||
-    !email ||
-    !cnic ||
-    !address ||
-    !institutionType ||
-    !salary
-  ) {
-    return res
-      .status(400)
-      .json({ message: "All fields are required", success: false });
-  }
-  try {
-    const teacher = await Teacher.findById(req.params.id);
-    if (!teacher) {
-      return res
-        .status(404)
-        .json({ message: "Teacher not found", success: false });
-    }
-    teacher.name = name;
-    teacher.contact = contact;
-    teacher.email = email;
-    teacher.cnic = cnic;
-    teacher.salary = salary;
-    teacher.address = address;
-    teacher.institutionType = institutionType;
-    await teacher.save();
-    res.json({ message: "Teacher updated successfully", success: true });
-  } catch (error) {
-    res.status(500).json({ message: "Server error", success: false });
-  }
-});
+// Removes the teacher from THIS institution only. Deletes the whole
+// record only if this was their last remaining institution.
+router.delete(
+  "/deleteTeacher/:id",
+  authMiddleWare,
+  requireInstitution,
+  async (req, res) => {
+    try {
+      const teacher = await Teacher.findOne({
+        _id: req.params.id,
+        institutions: req.user.institution,
+      });
+      if (!teacher) {
+        return res
+          .status(404)
+          .json({ message: "Teacher not found", success: false });
+      }
 
-// Get total students for the logged-in teacher
-router.get("/totalStudents", authMiddleWare, async (req, res) => {
+      teacher.institutions = teacher.institutions.filter(
+        (id) => id.toString() !== req.user.institution.toString(),
+      );
+      teacher.salaryByInstitution = teacher.salaryByInstitution.filter(
+        (entry) =>
+          entry.institution.toString() !== req.user.institution.toString(),
+      );
+
+      if (teacher.institutions.length === 0) {
+        await Teacher.findByIdAndDelete(teacher._id);
+        return res.json({
+          message: "Teacher deleted successfully",
+          success: true,
+        });
+      }
+
+      await teacher.save();
+      res.json({
+        message: "Teacher removed from this institution",
+        success: true,
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Server error", success: false });
+    }
+  },
+);
+
+router.put(
+  "/updateTeacher/:id",
+  authMiddleWare,
+  requireInstitution,
+  async (req, res) => {
+    const { name, contact, email, cnic, address, salary } = req.body;
+    if (!name || !contact || !email || !cnic || !address || !salary) {
+      return res
+        .status(400)
+        .json({ message: "All fields are required", success: false });
+    }
+    try {
+      const teacher = await Teacher.findOne({
+        _id: req.params.id,
+        institutions: req.user.institution,
+      });
+      if (!teacher) {
+        return res
+          .status(404)
+          .json({ message: "Teacher not found", success: false });
+      }
+
+      // Identity fields are shared across every institution this teacher
+      // belongs to - update once, visible everywhere immediately.
+      teacher.name = name;
+      teacher.contact = contact;
+      teacher.email = email;
+      teacher.cnic = cnic;
+      teacher.address = address;
+
+      // Salary is per-institution.
+      const entry = teacher.salaryByInstitution.find(
+        (s) => s.institution.toString() === req.user.institution.toString(),
+      );
+      if (entry) {
+        entry.salary = salary;
+      } else {
+        teacher.salaryByInstitution.push({
+          institution: req.user.institution,
+          salary,
+        });
+      }
+
+      await teacher.save();
+      res.json({ message: "Teacher updated successfully", success: true });
+    } catch (error) {
+      if (error.code === 11000) {
+        return res.status(400).json({
+          message: "Another teacher already uses this email or CNIC",
+          success: false,
+        });
+      }
+      res.status(500).json({ message: "Server error", success: false });
+    }
+  },
+);
+
+router.get("/totalStudents", authMiddleWare, requireInstitution, async (req, res) => {
   if (req.user.role !== "teacher") {
     return res.status(403).json({
       message: "Unauthorized, Only teachers can view their students",
@@ -194,9 +427,9 @@ router.get("/totalStudents", authMiddleWare, async (req, res) => {
   try {
     const teacherId = req.user.id;
 
-    // Find all courses where this teacher is assigned
     const courses = await Course.find({
       "assignments.teacher": teacherId,
+      institution: req.user.institution,
     });
 
     if (!courses || courses.length === 0) {
@@ -208,12 +441,10 @@ router.get("/totalStudents", authMiddleWare, async (req, res) => {
 
     const courseIds = courses.map((course) => course._id);
 
-    // Find all registrations for these courses and get unique students
     const registrations = await Registration.find({
       "aboutCourse.course": { $in: courseIds },
     }).populate("student");
 
-    // Get unique student IDs
     const uniqueStudentIds = [
       ...new Set(
         registrations.map((reg) => String(reg.student?._id || reg.student)),
@@ -235,57 +466,86 @@ router.get("/totalStudents", authMiddleWare, async (req, res) => {
   }
 });
 
+/* ------------------------------------------------------------------ */
+/* Password reset / security question                                  */
+/* Public routes (no token). Email is unique per teacher globally, so    */
+/* these unambiguously refer to a single teacher.                       */
+/* ------------------------------------------------------------------ */
 
 router.post("/resetPassword", async (req, res) => {
-  const {email, currentPassword, newPassword } = req.body;
+  const { email, currentPassword, newPassword } = req.body;
   if (!email || !currentPassword || !newPassword) {
-    return res
-      .status(400)
-      .json({ message: "Email, current, and new password are required", success: false });
+    return res.status(400).json({
+      message: "Email, current, and new password are required",
+      success: false,
+    });
   }
 
   try {
     const teacher = await Teacher.findOne({ email });
     if (!teacher) {
-      return res.status(404).json({ message: "Teacher not found", success: false });
+      return res
+        .status(404)
+        .json({ message: "Teacher not found", success: false });
     }
 
     const isMatch = await bcrypt.compare(currentPassword, teacher.password);
     if (!isMatch) {
-      return res.status(400).json({ message: "Current password is incorrect", success: false });
+      return res
+        .status(400)
+        .json({ message: "Current password is incorrect", success: false });
     }
-    if(newPassword.length < 6){
-      return res.status(400).json({ message: "New password must be at least 6 characters long", success: false });
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        message: "New password must be at least 6 characters long",
+        success: false,
+      });
     }
     if (currentPassword === newPassword) {
-      return res.status(400).json({ message: "New password cannot be the same as current password", success: false });
+      return res.status(400).json({
+        message: "New password cannot be the same as current password",
+        success: false,
+      });
     }
-    if (!/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
-      return res.status(400).json({ message: "New password must contain at least one uppercase letter, one lowercase letter, and one number", success: false });
+    if (
+      !/[A-Z]/.test(newPassword) ||
+      !/[a-z]/.test(newPassword) ||
+      !/[0-9]/.test(newPassword)
+    ) {
+      return res.status(400).json({
+        message:
+          "New password must contain at least one uppercase letter, one lowercase letter, and one number",
+        success: false,
+      });
     }
     const hashedNewPassword = await bcrypt.hash(newPassword, 10);
-
 
     teacher.password = hashedNewPassword;
     teacher.isPasswordChanged = true;
     await teacher.save();
 
-    res.status(200).json({ message: "Password reset successfully", success: true });
+    res
+      .status(200)
+      .json({ message: "Password reset successfully", success: true });
   } catch (error) {
     res.status(500).json({ message: error.message, success: false });
   }
 });
+
 router.post("/setSecurityQuestion", async (req, res) => {
-  const {email, securityQuestion, securityAnswer } = req.body;
+  const { email, securityQuestion, securityAnswer } = req.body;
   if (!email || !securityQuestion || !securityAnswer) {
     return res.status(400).json({
       message: "Email, security question, and answer are required",
       success: false,
     });
   }
-  try {    const teacher = await Teacher.findOne({ email });
+  try {
+    const teacher = await Teacher.findOne({ email });
     if (!teacher) {
-      return res.status(404).json({ message: "Teacher not found", success: false });
+      return res
+        .status(404)
+        .json({ message: "Teacher not found", success: false });
     }
     const hashedAnswer = await bcrypt.hash(securityAnswer, 10);
     teacher.securityQuestion = securityQuestion;
@@ -309,9 +569,12 @@ router.post("/verifySecurityAnswer", async (req, res) => {
       success: false,
     });
   }
-  try {    const teacher = await Teacher.findOne({ email });
+  try {
+    const teacher = await Teacher.findOne({ email });
     if (!teacher) {
-      return res.status(404).json({ message: "Teacher not found", success: false });
+      return res
+        .status(404)
+        .json({ message: "Teacher not found", success: false });
     }
     if (!teacher.isSecuritySet) {
       return res.status(400).json({
@@ -319,12 +582,15 @@ router.post("/verifySecurityAnswer", async (req, res) => {
         success: false,
       });
     }
-    const isMatch = await bcrypt.compare(securityAnswer, teacher.securityAnswer);
+    const isMatch = await bcrypt.compare(
+      securityAnswer,
+      teacher.securityAnswer,
+    );
     if (!isMatch) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         message: "Security answer is incorrect",
         success: false,
-       });
+      });
     }
     res.status(200).json({
       message: "Security answer verified successfully",
@@ -333,8 +599,8 @@ router.post("/verifySecurityAnswer", async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message, success: false });
   }
-
 });
+
 router.post("/auth/verify-email-for-reset", async (req, res) => {
   const { email } = req.body;
   if (!email) {
@@ -342,10 +608,14 @@ router.post("/auth/verify-email-for-reset", async (req, res) => {
       message: "Email is required",
       success: false,
     });
-  } 
-  try {   const teacher = await Teacher.findOne({ email });
+  }
+  try {
+    const teacher = await Teacher.findOne({ email });
     if (!teacher) {
-      return res.status(404).json({ message: "Teacher not found on this email", success: false });
+      return res.status(404).json({
+        message: "Teacher not found on this email",
+        success: false,
+      });
     }
     res.status(200).json({
       message: "Email verified successfully",
@@ -363,40 +633,7 @@ router.post("/auth/verify-email-for-reset", async (req, res) => {
   }
 });
 
-
-
-// router.get("/migrate-teachers-fields", async (req, res) => {
-//   try {
-//     const result = await Teacher.updateMany(
-//       {
-//         $or: [
-//           { isPasswordChanged: { $exists: false } },
-//           { securityQuestion: { $exists: false } },
-//           { securityAnswer: { $exists: false } },
-//           { isSecuritySet: { $exists: false } }
-//         ]
-//       },
-//       {
-//         $set: {
-//           isPasswordChanged: false,
-//           securityQuestion: "",
-//           securityAnswer: "",
-//           isSecuritySet: false
-//         }
-//       }
-//     );
-
-//     res.json({
-//       message: "Migration completed successfully",
-//       matched: result.matchedCount,
-//       modified: result.modifiedCount
-//     });
-
-//   } catch (err) {
-//     res.status(500).json({ error: err.message });
-//   }
-// });
-
+// One-time migration route (no institution scope on purpose - remove after use)
 router.post("/replaceAssignmentTargetClasses", async (req, res) => {
   try {
     const courses = await Course.collection.find({}).toArray();
@@ -414,7 +651,7 @@ router.post("/replaceAssignmentTargetClasses", async (req, res) => {
           const matchedClass = classes.find(
             (cls) =>
               cls.name.trim().toLowerCase() ===
-              String(className).trim().toLowerCase()
+              String(className).trim().toLowerCase(),
           );
 
           if (matchedClass) {
@@ -431,7 +668,7 @@ router.post("/replaceAssignmentTargetClasses", async (req, res) => {
           $set: {
             assignments: course.assignments,
           },
-        }
+        },
       );
 
       result.push({
@@ -454,9 +691,5 @@ router.post("/replaceAssignmentTargetClasses", async (req, res) => {
     });
   }
 });
-
-
-
-
 
 module.exports = router;

@@ -7,6 +7,7 @@ const timeTableSchema = new mongoose.Schema(
       ref: "Course",
       required: true,
     },
+     institution: {type: mongoose.Schema.Types.ObjectId, ref: "Institution", required: true},
     teacher: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Teacher",

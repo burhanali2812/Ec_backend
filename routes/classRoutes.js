@@ -11,8 +11,8 @@ router.post("/addClass", authMiddleWare, async (req, res) => {
         success: false,
     });
   }
-    const { name, description } = req.body;
-    const newClass = new Class({ name, description });
+    const { name, description} = req.body;
+    const newClass = new Class({ name, description, institution: req.user.institution , createdBy: req.user.id });
     await newClass.save();
 
     return res.status(201).json({
@@ -24,7 +24,7 @@ router.post("/addClass", authMiddleWare, async (req, res) => {
 
 router.get("/getClasses", authMiddleWare, async (req, res) => {
     try {
-        const classes = await Class.find();
+        const classes = await Class.find({ institution: req.user.institution }).populate("institution", "name");
         return res.status(200).json({
             message: "Classes fetched successfully",
             success: true,
@@ -53,6 +53,7 @@ router.put("/updateClass/:classId", authMiddleWare, async (req, res) => {
     try {
         const updatedClass = await Class.findByIdAndUpdate(
             classId,
+            { institution: req.user.institution },
             { name, description },
             { new: true }
         );

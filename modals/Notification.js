@@ -37,6 +37,7 @@ const notificationSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+     institution: {type: mongoose.Schema.Types.ObjectId, ref: "Institution", required: true},
 
     type: {
       type: String,

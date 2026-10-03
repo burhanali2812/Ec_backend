@@ -1,15 +1,14 @@
 const mongoose = require("mongoose");
 
-const adminSchema = new mongoose.Schema({
+const superAdminSchema = new mongoose.Schema({
     email: {type: String, required: true, unique: true},
     password: {type: String, required: true},
     firstName: {type: String, required: true},
     lastName: {type: String, required: true},
-    institution: [{type: mongoose.Schema.Types.ObjectId, ref: "Institution", required: true}],
     fcmTokens: {
-  type: [String],
-  default: [],
-},
-})
+        type: [String],
+        default: [],
+    },
+});
 
-module.exports = mongoose.model("Admin", adminSchema)
+module.exports = mongoose.model("SuperAdmin", superAdminSchema);

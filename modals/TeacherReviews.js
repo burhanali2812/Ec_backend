@@ -7,7 +7,7 @@ const teacherReviewSchema = new mongoose.Schema({
         ref: "Teacher",
         required: true
     },
-
+ institution: {type: mongoose.Schema.Types.ObjectId, ref: "Institution", required: true},
     student: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Student",
